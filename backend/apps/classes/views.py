@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
@@ -6,8 +7,16 @@ from rest_framework.views import APIView
 
 from . import services
 from .models import Class, ClassMembership, Lecture
-from .permissions import IsClassMember, IsClassProfessor
-from .serializers import ClassSerializer, LectureSerializer, MembershipSerializer, RoleChangeSerializer
+from .permissions import IsClassMember, IsClassProfessor, membership_for
+from .serializers import (
+    ClassSerializer,
+    InviteCreateSerializer,
+    LectureSerializer,
+    MembershipSerializer,
+    RoleChangeSerializer,
+)
+
+User = get_user_model()
 
 
 class ClassListCreate(generics.ListCreateAPIView):
@@ -64,6 +73,36 @@ class MemberDetail(APIView):
         except services.LastProfessorError as e:
             return Response({"detail": str(e)}, status=status.HTTP_409_CONFLICT)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class InviteCreate(APIView):
+    """POST creates an invitation to this class. Professor-only; token shown once."""
+
+    permission_classes = [IsClassProfessor]
+
+    @extend_schema(request=InviteCreateSerializer, responses=InviteCreateSerializer)
+    def post(self, request, class_id):
+        klass = get_object_or_404(Class, id=class_id)
+        serializer = InviteCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data["email"].strip().lower()
+        role = serializer.validated_data["role"]
+
+        # If an account already exists for this email and is an active member,
+        # there is nothing to invite. (No account yet is fine: invite before signup.)
+        existing_user = User.objects.filter(email__iexact=email).first()
+        if existing_user is not None and membership_for(existing_user, class_id) is not None:
+            return Response(
+                {"detail": "That person is already a member of this class."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        invite, raw_token = services.create_invite(
+            klass=klass, email=email, role=role, invited_by=request.user
+        )
+        body = InviteCreateSerializer(invite).data
+        body["token"] = raw_token
+        return Response(body, status=status.HTTP_201_CREATED)
 
 
 class LectureListCreate(generics.ListCreateAPIView):

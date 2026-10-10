@@ -6,7 +6,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from apps.classes import services
-from apps.classes.models import ClassMembership
+from apps.classes.models import Class, ClassMembership, Invite
 
 Role = ClassMembership.Role
 Status = ClassMembership.Status
@@ -108,3 +108,97 @@ def test_accept_invite_already_member(klass, make_user):
     _, raw_token = services.create_invite(klass=klass, email=prof.email, role=Role.TA, invited_by=prof)
     with pytest.raises(services.AlreadyMember):
         services.accept_invite(user=prof, raw_token=raw_token)
+
+
+# --- Slice 2: invite create endpoint ----------------------------------------
+
+PASSWORD = "a-good-password-123"
+
+
+def _login(api, email):
+    res = api.post("/api/v1/auth/login", {"email": email, "password": PASSWORD})
+    assert res.status_code == 200
+
+
+def _make_class(api, make_user, email="prof@purdue.edu"):
+    make_user(email)
+    _login(api, email)
+    res = api.post("/api/v1/classes", {"name": "Dynamics", "course_code": "ME 27400"})
+    assert res.status_code == 201
+    return res.data["id"]
+
+
+@pytest.mark.django_db
+def test_invite_create_professor_201_token_once(api, make_user):
+    class_id = _make_class(api, make_user)
+    res = api.post(f"/api/v1/classes/{class_id}/invites", {"email": "ta@purdue.edu", "role": "ta"})
+    assert res.status_code == 201
+    assert set(["id", "email", "role", "expires_at", "token"]).issubset(res.data.keys())
+    assert res.data["email"] == "ta@purdue.edu"
+    assert res.data["role"] == "ta"
+    raw_token = res.data["token"]
+    assert raw_token
+
+    invite = Invite.objects.get(id=res.data["id"])
+    assert invite.token_hash == hashlib.sha256(raw_token.encode()).hexdigest()
+    # The raw token is never persisted on the row.
+    for value in invite.__dict__.values():
+        assert value != raw_token
+
+
+@pytest.mark.django_db
+def test_invite_create_response_serializer_has_no_token_on_read(api, make_user):
+    from apps.classes.serializers import InviteCreateSerializer
+
+    class_id = _make_class(api, make_user)
+    invite, _ = services.create_invite(
+        klass=Class.objects.get(id=class_id), email="ta@purdue.edu", role=Role.TA,
+        invited_by=make_user("another@purdue.edu"),
+    )
+    # Serializing an existing invite instance must not expose a token value.
+    data = InviteCreateSerializer(invite).data
+    assert not data.get("token")
+
+
+@pytest.mark.django_db
+def test_invite_create_ta_member_forbidden(api, make_user):
+    class_id = _make_class(api, make_user)
+    ta = make_user("ta@purdue.edu")
+    ClassMembership.objects.create(user=ta, klass_id=class_id, role=Role.TA)
+    api.post("/api/v1/auth/logout")
+    _login(api, "ta@purdue.edu")
+    res = api.post(f"/api/v1/classes/{class_id}/invites", {"email": "new@purdue.edu", "role": "ta"})
+    assert res.status_code == 403
+
+
+@pytest.mark.django_db
+def test_invite_create_outsider_forbidden(api, make_user):
+    class_id = _make_class(api, make_user)
+    make_user("outsider@purdue.edu")
+    api.post("/api/v1/auth/logout")
+    _login(api, "outsider@purdue.edu")
+    res = api.post(f"/api/v1/classes/{class_id}/invites", {"email": "new@purdue.edu", "role": "ta"})
+    assert res.status_code == 403
+
+
+@pytest.mark.django_db
+def test_invite_create_invalid_role_400(api, make_user):
+    class_id = _make_class(api, make_user)
+    res = api.post(f"/api/v1/classes/{class_id}/invites", {"email": "ta@purdue.edu", "role": "student"})
+    assert res.status_code == 400
+
+
+@pytest.mark.django_db
+def test_invite_create_invalid_email_400(api, make_user):
+    class_id = _make_class(api, make_user)
+    res = api.post(f"/api/v1/classes/{class_id}/invites", {"email": "not-an-email", "role": "ta"})
+    assert res.status_code == 400
+
+
+@pytest.mark.django_db
+def test_invite_create_existing_active_member_409(api, make_user):
+    class_id = _make_class(api, make_user)
+    existing = make_user("ta@purdue.edu")
+    ClassMembership.objects.create(user=existing, klass_id=class_id, role=Role.TA)
+    res = api.post(f"/api/v1/classes/{class_id}/invites", {"email": "ta@purdue.edu", "role": "ta"})
+    assert res.status_code == 409
