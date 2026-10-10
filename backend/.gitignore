@@ -6,3 +6,6 @@ db.sqlite3
 staticfiles/
 .pytest_cache/
 .ruff_cache/
+
+# Workflow/agent run artifacts (plans, reviews, task scratch)
+.agents/
