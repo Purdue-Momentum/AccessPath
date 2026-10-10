@@ -202,3 +202,88 @@ def test_invite_create_existing_active_member_409(api, make_user):
     ClassMembership.objects.create(user=existing, klass_id=class_id, role=Role.TA)
     res = api.post(f"/api/v1/classes/{class_id}/invites", {"email": "ta@purdue.edu", "role": "ta"})
     assert res.status_code == 409
+
+
+# --- Slice 3: invite accept endpoint ----------------------------------------
+
+
+def _mint_invite_token(api, make_user, email, role="ta"):
+    """Create a class as the professor, invite `email`, return (class_id, token)."""
+    class_id = _make_class(api, make_user)
+    res = api.post(f"/api/v1/classes/{class_id}/invites", {"email": email, "role": role})
+    assert res.status_code == 201
+    api.post("/api/v1/auth/logout")
+    return class_id, res.data["token"]
+
+
+@pytest.mark.django_db
+def test_invite_accept_matching_email_becomes_member(api, make_user):
+    class_id, token = _mint_invite_token(api, make_user, "ta@purdue.edu", role="ta")
+    make_user("ta@purdue.edu")
+    _login(api, "ta@purdue.edu")
+    res = api.post(f"/api/v1/invites/{token}/accept")
+    assert res.status_code in (200, 201)
+    membership = ClassMembership.objects.get(klass_id=class_id, user__email="ta@purdue.edu")
+    assert membership.role == Role.TA
+    assert membership.status == Status.ACTIVE
+    invite = Invite.objects.get(klass_id=class_id)
+    assert invite.accepted_at is not None
+
+
+@pytest.mark.django_db
+def test_invite_accept_role_comes_from_invite(api, make_user):
+    class_id, token = _mint_invite_token(api, make_user, "newprof@purdue.edu", role="professor")
+    make_user("newprof@purdue.edu")
+    _login(api, "newprof@purdue.edu")
+    res = api.post(f"/api/v1/invites/{token}/accept")
+    assert res.status_code in (200, 201)
+    membership = ClassMembership.objects.get(klass_id=class_id, user__email="newprof@purdue.edu")
+    assert membership.role == Role.PROFESSOR
+
+
+@pytest.mark.django_db
+def test_invite_accept_wrong_email_409(api, make_user):
+    _, token = _mint_invite_token(api, make_user, "ta@purdue.edu")
+    make_user("wrong@purdue.edu")
+    _login(api, "wrong@purdue.edu")
+    res = api.post(f"/api/v1/invites/{token}/accept")
+    assert res.status_code == 409
+
+
+@pytest.mark.django_db
+def test_invite_accept_expired_410(api, make_user):
+    class_id, token = _mint_invite_token(api, make_user, "ta@purdue.edu")
+    invite = Invite.objects.get(klass_id=class_id)
+    invite.expires_at = timezone.now() - timedelta(hours=1)
+    invite.save(update_fields=["expires_at"])
+    make_user("ta@purdue.edu")
+    _login(api, "ta@purdue.edu")
+    res = api.post(f"/api/v1/invites/{token}/accept")
+    assert res.status_code == 410
+
+
+@pytest.mark.django_db
+def test_invite_accept_reused_409(api, make_user):
+    _, token = _mint_invite_token(api, make_user, "ta@purdue.edu")
+    make_user("ta@purdue.edu")
+    _login(api, "ta@purdue.edu")
+    first = api.post(f"/api/v1/invites/{token}/accept")
+    assert first.status_code in (200, 201)
+    second = api.post(f"/api/v1/invites/{token}/accept")
+    assert second.status_code == 409
+
+
+@pytest.mark.django_db
+def test_invite_accept_unknown_token_404(api, make_user):
+    make_user("ta@purdue.edu")
+    _login(api, "ta@purdue.edu")
+    res = api.post("/api/v1/invites/this-token-does-not-exist/accept")
+    assert res.status_code == 404
+
+
+@pytest.mark.django_db
+def test_invite_accept_unauthenticated_rejected(api, make_user):
+    _, token = _mint_invite_token(api, make_user, "ta@purdue.edu")
+    # No login after logout inside _mint_invite_token.
+    res = api.post(f"/api/v1/invites/{token}/accept")
+    assert res.status_code in (401, 403)

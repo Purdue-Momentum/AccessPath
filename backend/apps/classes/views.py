@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import services
-from .models import Class, ClassMembership, Lecture
+from .models import Class, ClassMembership, Invite, Lecture
 from .permissions import IsClassMember, IsClassProfessor, membership_for
 from .serializers import (
     ClassSerializer,
@@ -103,6 +103,27 @@ class InviteCreate(APIView):
         body = InviteCreateSerializer(invite).data
         body["token"] = raw_token
         return Response(body, status=status.HTTP_201_CREATED)
+
+
+class InviteAccept(APIView):
+    """POST accepts an invitation and creates the membership. Authenticated + email-bound.
+
+    Maps service exceptions to HTTP, mirroring MemberDetail's LastProfessorError -> 409:
+    unknown token -> 404, expired -> 410, email mismatch / already-accepted /
+    already-member -> 409.
+    """
+
+    @extend_schema(request=None, responses=MembershipSerializer)
+    def post(self, request, token):
+        try:
+            membership = services.accept_invite(user=request.user, raw_token=token)
+        except Invite.DoesNotExist:
+            return Response({"detail": "This invitation is not valid."}, status=status.HTTP_404_NOT_FOUND)
+        except services.InviteExpired as e:
+            return Response({"detail": str(e)}, status=status.HTTP_410_GONE)
+        except (services.InviteEmailMismatch, services.InviteAlreadyAccepted, services.AlreadyMember) as e:
+            return Response({"detail": str(e)}, status=status.HTTP_409_CONFLICT)
+        return Response(MembershipSerializer(membership).data, status=status.HTTP_201_CREATED)
 
 
 class LectureListCreate(generics.ListCreateAPIView):

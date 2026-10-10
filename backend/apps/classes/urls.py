@@ -9,4 +9,5 @@ urlpatterns = [
          name="member-detail"),
     path("classes/<uuid:class_id>/lectures", views.LectureListCreate.as_view(), name="lecture-list"),
     path("classes/<uuid:class_id>/invites", views.InviteCreate.as_view(), name="invite-create"),
+    path("invites/<str:token>/accept", views.InviteAccept.as_view(), name="invite-accept"),
 ]
