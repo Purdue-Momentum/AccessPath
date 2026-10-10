@@ -1,0 +1,110 @@
+import hashlib
+from datetime import timedelta
+
+import pytest
+from django.conf import settings
+from django.utils import timezone
+
+from apps.classes import services
+from apps.classes.models import ClassMembership
+
+Role = ClassMembership.Role
+Status = ClassMembership.Status
+
+
+@pytest.fixture
+def klass(make_user):
+    prof = make_user("prof@purdue.edu")
+    return services.create_class(user=prof, name="Dynamics", course_code="ME 27400")
+
+
+# --- Slice 1: service layer -------------------------------------------------
+
+
+def test_create_invite_returns_token_and_stores_only_hash(klass):
+    prof = klass.created_by
+    invite, raw_token = services.create_invite(
+        klass=klass, email="ta@purdue.edu", role=Role.TA, invited_by=prof
+    )
+    assert raw_token
+    assert invite.token_hash == hashlib.sha256(raw_token.encode()).hexdigest()
+    assert len(invite.token_hash) == 64
+    # The raw token must not be persisted on any field of the row.
+    invite.refresh_from_db()
+    for value in invite.__dict__.values():
+        assert value != raw_token
+
+
+def test_create_invite_tokens_are_random(klass):
+    prof = klass.created_by
+    _, token_a = services.create_invite(klass=klass, email="a@purdue.edu", role=Role.TA, invited_by=prof)
+    _, token_b = services.create_invite(klass=klass, email="b@purdue.edu", role=Role.TA, invited_by=prof)
+    assert token_a != token_b
+
+
+def test_create_invite_expiry_from_setting(klass):
+    prof = klass.created_by
+    before = timezone.now()
+    invite, _ = services.create_invite(klass=klass, email="ta@purdue.edu", role=Role.TA, invited_by=prof)
+    expected = before + timedelta(hours=settings.INVITE_TTL_HOURS)
+    assert abs((invite.expires_at - expected).total_seconds()) < 30
+
+
+def test_create_invite_normalizes_email(klass):
+    prof = klass.created_by
+    invite, _ = services.create_invite(klass=klass, email="  TA@Purdue.edu ", role=Role.TA, invited_by=prof)
+    assert invite.email == "ta@purdue.edu"
+
+
+def test_accept_invite_happy_path(klass, make_user):
+    prof = klass.created_by
+    ta_user = make_user("ta@purdue.edu")
+    invite, raw_token = services.create_invite(
+        klass=klass, email="ta@purdue.edu", role=Role.TA, invited_by=prof
+    )
+    membership = services.accept_invite(user=ta_user, raw_token=raw_token)
+    assert membership.klass_id == klass.id
+    assert membership.role == Role.TA
+    assert membership.status == Status.ACTIVE
+    assert membership.invited_by_id == prof.id
+    invite.refresh_from_db()
+    assert invite.accepted_at is not None
+
+
+def test_accept_invite_expired(klass, make_user):
+    prof = klass.created_by
+    ta_user = make_user("ta@purdue.edu")
+    invite, raw_token = services.create_invite(
+        klass=klass, email="ta@purdue.edu", role=Role.TA, invited_by=prof
+    )
+    invite.expires_at = timezone.now() - timedelta(hours=1)
+    invite.save(update_fields=["expires_at"])
+    with pytest.raises(services.InviteExpired):
+        services.accept_invite(user=ta_user, raw_token=raw_token)
+
+
+def test_accept_invite_already_accepted(klass, make_user):
+    prof = klass.created_by
+    ta_user = make_user("ta@purdue.edu")
+    invite, raw_token = services.create_invite(
+        klass=klass, email="ta@purdue.edu", role=Role.TA, invited_by=prof
+    )
+    services.accept_invite(user=ta_user, raw_token=raw_token)
+    with pytest.raises(services.InviteAlreadyAccepted):
+        services.accept_invite(user=ta_user, raw_token=raw_token)
+
+
+def test_accept_invite_email_mismatch(klass, make_user):
+    prof = klass.created_by
+    other = make_user("someoneelse@purdue.edu")
+    _, raw_token = services.create_invite(klass=klass, email="ta@purdue.edu", role=Role.TA, invited_by=prof)
+    with pytest.raises(services.InviteEmailMismatch):
+        services.accept_invite(user=other, raw_token=raw_token)
+
+
+def test_accept_invite_already_member(klass, make_user):
+    prof = klass.created_by
+    # The professor who created the class is already an active member.
+    _, raw_token = services.create_invite(klass=klass, email=prof.email, role=Role.TA, invited_by=prof)
+    with pytest.raises(services.AlreadyMember):
+        services.accept_invite(user=prof, raw_token=raw_token)

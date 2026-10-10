@@ -124,5 +124,8 @@ ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default=None)
 LLM_STRONG_MODEL = env("LLM_STRONG_MODEL", default="claude-sonnet-5-5")
 LLM_CHEAP_MODEL = env("LLM_CHEAP_MODEL", default="claude-haiku-5-5")
 
+# Invites. How long a class invitation stays valid before it expires.
+INVITE_TTL_HOURS = env.int("INVITE_TTL_HOURS", default=72)
+
 # Uploads
 MAX_UPLOAD_BYTES = env.int("MAX_UPLOAD_BYTES", default=200 * 1024 * 1024)
