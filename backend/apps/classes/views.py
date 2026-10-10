@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 
 from . import services
 from .models import Class, ClassMembership, Invite, Lecture
-from .permissions import IsClassMember, IsClassProfessor, membership_for
+from .permissions import IsClassMember, IsClassProfessor, is_active_professor, membership_for
 from .serializers import (
     ClassSerializer,
     InviteCreateSerializer,
@@ -128,10 +128,63 @@ class InviteAccept(APIView):
 
 class LectureListCreate(generics.ListCreateAPIView):
     serializer_class = LectureSerializer
-    permission_classes = [IsClassMember]
+
+    def get_permissions(self):
+        # Listing stays open to any active member; creating is professor-only.
+        if self.request.method == "POST":
+            return [IsClassProfessor()]
+        return [IsClassMember()]
 
     def get_queryset(self):
         return Lecture.objects.filter(klass_id=self.kwargs["class_id"])
 
     def perform_create(self, serializer):
         serializer.save(klass_id=self.kwargs["class_id"])
+
+
+# Lecture fields only a professor may change. ta_context is editable by TAs too.
+PROFESSOR_ONLY_LECTURE_FIELDS = {"title", "order"}
+
+
+class LectureDetail(APIView):
+    """GET/PATCH/DELETE one lecture, scoped to its class so cross-class ids 404.
+
+    PATCH of ta_context is allowed for any active member (professor or TA);
+    PATCH touching title/order requires an active professor. DELETE is
+    professor-only.
+    """
+
+    permission_classes = [IsClassMember]
+
+    def _get(self, class_id, lecture_id):
+        return get_object_or_404(Lecture, klass_id=class_id, id=lecture_id)
+
+    @extend_schema(responses=LectureSerializer)
+    def get(self, request, class_id, lecture_id):
+        lecture = self._get(class_id, lecture_id)
+        return Response(LectureSerializer(lecture).data)
+
+    @extend_schema(request=LectureSerializer, responses=LectureSerializer)
+    def patch(self, request, class_id, lecture_id):
+        lecture = self._get(class_id, lecture_id)
+        touches_professor_fields = PROFESSOR_ONLY_LECTURE_FIELDS.intersection(request.data.keys())
+        if touches_professor_fields and not is_active_professor(request.user, class_id):
+            return Response(
+                {"detail": "Only professors can change the title or order of a lecture."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = LectureSerializer(lecture, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    @extend_schema(responses={204: None})
+    def delete(self, request, class_id, lecture_id):
+        lecture = self._get(class_id, lecture_id)
+        if not is_active_professor(request.user, class_id):
+            return Response(
+                {"detail": "Only professors can delete a lecture."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        lecture.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
