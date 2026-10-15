@@ -7,6 +7,7 @@ professor rows, count what would be left, and refuse if the answer is zero.
 """
 
 import hashlib
+import hmac
 import secrets
 from datetime import timedelta
 
@@ -48,6 +49,12 @@ def _hash_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode()).hexdigest()
 
 
+def _tokens_match(raw_token: str, stored_hash: str) -> bool:
+    # Compare the secret-derived hashes with hmac.compare_digest so the check
+    # runs in constant time and does not leak information via early-exit.
+    return hmac.compare_digest(_hash_token(raw_token), stored_hash)
+
+
 def create_invite(*, klass, email, role, invited_by):
     """Mint an invite. Returns (invite, raw_token); only the token's hash is stored."""
     raw_token = secrets.token_urlsafe(32)
@@ -70,6 +77,11 @@ def accept_invite(*, user, raw_token):
     """
     with transaction.atomic():
         invite = Invite.objects.select_for_update().get(token_hash=_hash_token(raw_token))
+
+        # Re-verify the token against the stored hash in constant time. A value
+        # that does not match is treated identically to an unknown token (404).
+        if not _tokens_match(raw_token, invite.token_hash):
+            raise Invite.DoesNotExist
 
         if invite.expires_at <= timezone.now():
             raise InviteExpired("This invitation has expired.")

@@ -110,6 +110,65 @@ def test_accept_invite_already_member(klass, make_user):
         services.accept_invite(user=prof, raw_token=raw_token)
 
 
+# --- Slice 1b: constant-time token comparison -------------------------------
+
+
+def test_tokens_match_helper_true_and_false():
+    tok = "some-raw-token-value"
+    assert services._tokens_match(tok, services._hash_token(tok)) is True
+    assert services._tokens_match(tok, services._hash_token("other")) is False
+
+
+@pytest.mark.django_db
+def test_accept_invite_exact_token_verifies(klass, make_user):
+    prof = klass.created_by
+    ta_user = make_user("ta@purdue.edu")
+    invite, raw_token = services.create_invite(
+        klass=klass, email="ta@purdue.edu", role=Role.TA, invited_by=prof
+    )
+    # The token returned by create_invite must verify against the stored hash.
+    assert services._tokens_match(raw_token, invite.token_hash) is True
+    membership = services.accept_invite(user=ta_user, raw_token=raw_token)
+    assert membership.status == Status.ACTIVE
+
+
+@pytest.mark.django_db
+def test_accept_invite_wrong_token_not_found(klass, make_user):
+    prof = klass.created_by
+    ta_user = make_user("ta@purdue.edu")
+    services.create_invite(klass=klass, email="ta@purdue.edu", role=Role.TA, invited_by=prof)
+    with pytest.raises(Invite.DoesNotExist):
+        services.accept_invite(user=ta_user, raw_token="not-the-real-token")
+
+
+@pytest.mark.django_db
+def test_accept_invite_tampered_hash_rejected(klass, make_user):
+    prof = klass.created_by
+    ta_user = make_user("ta@purdue.edu")
+    invite, raw_token = services.create_invite(
+        klass=klass, email="ta@purdue.edu", role=Role.TA, invited_by=prof
+    )
+    # If the stored hash is tampered to a different value, the original token
+    # must no longer accept: the row is no longer discoverable by its hash and
+    # the constant-time re-verification would also reject it.
+    tampered = services._hash_token("a-completely-different-token")
+    Invite.objects.filter(id=invite.id).update(token_hash=tampered)
+    with pytest.raises(Invite.DoesNotExist):
+        services.accept_invite(user=ta_user, raw_token=raw_token)
+
+
+@pytest.mark.django_db
+def test_accept_invite_routes_through_tokens_match(klass, make_user, monkeypatch):
+    prof = klass.created_by
+    ta_user = make_user("ta@purdue.edu")
+    _, raw_token = services.create_invite(
+        klass=klass, email="ta@purdue.edu", role=Role.TA, invited_by=prof
+    )
+    monkeypatch.setattr(services, "_tokens_match", lambda raw, stored: False)
+    with pytest.raises(Invite.DoesNotExist):
+        services.accept_invite(user=ta_user, raw_token=raw_token)
+
+
 # --- Slice 2: invite create endpoint ----------------------------------------
 
 PASSWORD = "a-good-password-123"
