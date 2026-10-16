@@ -3,6 +3,7 @@ from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from . import services
@@ -105,13 +106,34 @@ class InviteCreate(APIView):
         return Response(body, status=status.HTTP_201_CREATED)
 
 
+class InviteAcceptThrottle(ScopedRateThrottle):
+    """Rate-limit invite acceptance strictly per client IP.
+
+    ScopedRateThrottle keys authenticated requests by user id, but an attacker
+    iterating tokens would do so from a single account, so keying every request
+    on the IP catches more of that scripted guessing. We override get_cache_key
+    to always use the request IP as the identifier regardless of auth state.
+    """
+
+    scope = "invite-accept"
+
+    def get_cache_key(self, request, view):
+        if self.rate is None:
+            return None
+        return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
+
+
 class InviteAccept(APIView):
     """POST accepts an invitation and creates the membership. Authenticated + email-bound.
 
     Maps service exceptions to HTTP, mirroring MemberDetail's LastProfessorError -> 409:
     unknown token -> 404, expired -> 410, email mismatch / already-accepted /
-    already-member -> 409.
+    already-member -> 409. Too many attempts from one IP within the window -> 429
+    (per-IP throttle to blunt scripted token iteration).
     """
+
+    throttle_classes = [InviteAcceptThrottle]
+    throttle_scope = "invite-accept"
 
     @extend_schema(request=None, responses=MembershipSerializer)
     def post(self, request, token):

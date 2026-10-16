@@ -89,10 +89,23 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# Cache backend. Throttling counts requests here, so it needs a defined
+# backend. Local-memory is per-process only; in production this should point at
+# a shared cache (e.g. Redis via the existing REDIS_URL) so throttling counts
+# hold across worker processes.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "accesspath-local",
+    }
+}
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Rate for the invite-accept endpoint only (scoped on the view, not global).
+    "DEFAULT_THROTTLE_RATES": {"invite-accept": env("INVITE_ACCEPT_THROTTLE", default="10/min")},
 }
 
 SPECTACULAR_SETTINGS = {
