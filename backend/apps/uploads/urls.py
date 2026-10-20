@@ -3,7 +3,5 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path("", views.index, name="index"),
+    path('uploads/classes/<uuid:class_id>/files/', UploadFiles.as_view())
 ]
-
-path("auth/login", views.login_view, name="login"),

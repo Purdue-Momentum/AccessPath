@@ -1,17 +1,76 @@
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError;
-from rest_framework import status
-from backend.apps.storage.s3 import presign_upload
+import uuid
+import os
+import hashlib
+import magic
 
-@api_view(['POST'])
-def upload_file(request):
-    filename = request.data.get('filename')
-    mime_type = request.data.get('mime_type')
-    
-    if not filename or not mime_type:
-        raise ValidationError({
-            "detail": "Missing 'filename' or 'mime_type' fields."
-        })
-    
-    upload_key =    
+from django.shortcuts import get_object_or_404
+
+from rest_framework import status
+from rest_framework.views import APIView
+from rest_framework.response import Response
+
+from backend.apps.storage import class_key, put_bytes
+from backend.apps.classes.models import Class, Lecture
+from .models import SourceFile
+
+class UploadFiles(APIView):
+    def post(self, request, class_id):
+
+        klass = get_object_or_404(Class, id=class_id)
+
+        lecture_id = request.POST.get("lecture_id")
+        if not lecture_id:
+            return Response(
+                {"error": "No lecture id provided."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Ensures that the lecture belongs to the class
+        lecture = get_object_or_404(Lecture, id=lecture_id, klass=klass)
+
+        files = request.FILES.getlist('files')
+
+        if not files:
+            return Response(
+                {"error": "No files provided."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        results = []
+
+        for f in files:
+            original_name = f.name
+            extension = os.path.splitext(original_name)[1]
+            size_bytes =  f.size
+            
+            # Inefficient: Struggles with large files
+            file_data = f.read()
+            sha256_hash = hashlib.sha256(file_data).hexdigest()
+            detected_type = magic.from_buffer(file_data, mime=True)
+
+            # Uploading to s3
+            file_uuid = uuid.uuid4()
+            s3_key = class_key(class_id, "uploads", str(file_uuid), original_name)
+            put_bytes(s3_key, file_data, detected_type)
+
+            source_file = SourceFile(
+                klass=klass,
+                lecture=lecture,
+                uploaded_by=request.user,
+                original_name=original_name,
+                extension=extension,
+                detected_type=detected_type,
+                size_bytes=size_bytes,
+                sha256=sha256_hash,
+                s3_key=s3_key,
+                status=SourceFile.Status.UPLOADED
+            )
+            source_file.save()
+
+            results.append({
+                "id": source_file.id,
+                "filename": source_file.original_name,
+                "s3_key": source_file.s3_key
+            })
+        
+        return Response({"results": results}, status=status.HTTP_201_CREATED)

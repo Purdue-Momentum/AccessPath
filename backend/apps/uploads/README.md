@@ -1,41 +1,26 @@
 ## File Upload Paths
-### POST `/uploads/v1/files`
-For single file uploads.
+### POST `/uploads/classes/<uuid:class_id>/files/`
 #### Examples
 ```
-# Sample Uplaod
-curl https://accesspath.purdue.edu/v1/files \
-  -F "file"="@/path/to/a/file.jpg"
+# Sample Request:
 ```
 ```
 # Sample Response:
 {
-  "filename": "file.jpg",
-  "file_id": "file_9f8b3c2d1e4a5f6",
-  
-}
-```
-### POST `/uploads/v1/files/batch`
-For multiple file uploads.
-(Urls generated via s3.presign_upload)
-```
-# Sample Response:
-{
-  "batch_id": "batch_xyz987",
-  "uploads": [
+  "results": [
     {
-      "filename": "avatar.png",
-      "file_id": "file_101",
-      "upload_url": "<Presigned URL>",
-      "method": "PUT"
+      "id": "6239c7cd-dd1f-450e-a70b-443064933cd7",
+      "filename": "lecture_slides.pdf",
+      "s3_key": "classes/8ac8b8b4-2349-47d0-aade-57715b2b7242/uploads/f88a75b6-2fbd-4bd7-9902-06fb8b4a853f/lecture_slides.pdf"
     },
     {
-      "filename": "resume.pdf",
-      "file_id": "file_102",
-      "upload_url": "<Presigned URL>",
-      "method": "PUT" # So that the frontend knows what method to use; some cloud storage services use POST
+      "id": "ff3457f3-39e9-4504-b7ff-47cc1b39cd1b",
+      "filename": "diagram.png",
+      "s3_key": "classes/c4c0361a-2076-4e32-ad7d-db93ceb59b21/uploads/44fdafdc-bb1d-4f08-a392-a583a5cc3ed7/diagram.png"
     }
   ]
 }
 ```
-## PythonMagic for file validation
+## TODO
+- Figure out what authentication looks like
+- Complete sample upload
