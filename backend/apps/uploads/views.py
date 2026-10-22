@@ -9,8 +9,8 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
-from backend.apps.storage import class_key, put_bytes
-from backend.apps.classes.models import Class, Lecture
+from apps.storage.s3 import class_key, put_bytes
+from apps.classes.models import Class, Lecture
 from .models import SourceFile
 
 class UploadFiles(APIView):
@@ -25,8 +25,7 @@ class UploadFiles(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Ensures that the lecture belongs to the class
-        lecture = get_object_or_404(Lecture, id=lecture_id, klass=klass)
+        lecture = get_object_or_404(Lecture, id=lecture_id)
 
         files = request.FILES.getlist('files')
 

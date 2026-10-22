@@ -24,3 +24,6 @@
 ## TODO
 - Figure out what authentication looks like
 - Complete sample upload
+- Ensure that the lecture belongs to the class
+## Notes
+- Name is passed in to urlpatterns to ensure that reverse can be used in unit test independently of path
