@@ -4,6 +4,7 @@ import hashlib
 import magic
 
 from django.shortcuts import get_object_or_404
+from django.db import transaction
 
 from rest_framework import status
 from rest_framework.views import APIView
@@ -11,7 +12,8 @@ from rest_framework.response import Response
 
 from apps.storage.s3 import class_key, put_bytes
 from apps.classes.models import Class, Lecture
-from .models import SourceFile
+from .models import SourceFile, ProcessingJob
+from .tasks import convert_source_file
 
 class UploadFiles(APIView):
     def post(self, request, class_id):
@@ -40,7 +42,7 @@ class UploadFiles(APIView):
         for f in files:
             original_name = f.name
             extension = os.path.splitext(original_name)[1]
-            size_bytes =  f.size
+            size_bytes = f.size
             
             # Inefficient: Struggles with large files
             file_data = f.read()
@@ -71,5 +73,16 @@ class UploadFiles(APIView):
                 "filename": source_file.original_name,
                 "s3_key": source_file.s3_key
             })
+
+            processing_job = ProcessingJob(
+                source_file=source_file,
+                stage=ProcessingJob.Stage.CONVERT                
+            )
+            processing_job.save()
+
+            # Parameter necessary because source_file.id
+            # will be passed by reference and python
+            # doesn't have block scoping for for loops
+            transaction.on_commit(lambda sf_id=source_file.id: convert_source_file.delay(sf_id))
         
         return Response({"results": results}, status=status.HTTP_201_CREATED)
