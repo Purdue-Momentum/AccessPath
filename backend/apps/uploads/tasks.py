@@ -6,7 +6,7 @@ from celery import shared_task
 from markitdown import MarkItDown, StreamInfo
 
 from apps.storage.s3 import get_bytes, class_key, put_bytes
-from .model import SourceFile, ProcessingJob
+from .models import SourceFile, ProcessingJob
 
 @shared_task
 def convert_source_file(source_file_id: str) -> None:
