@@ -1,15 +1,100 @@
-<!-- Example node XML. Engineer C owns this format. Every lane builds against this file. -->
-<document lecture="lec_4" source="dynamics_work_energy.pdf" prompt_version="proc-v1">
-  <node id="n1" kind="text" page="1" confidence="0.96">
-    Work is the integral of force along a path.
+<?xml version='1.0' encoding='utf-8'?>
+<document schema_version="0.1-proposal" document="synthetic-doc" lecture="synthetic-lecture" source="synthetic.pdf" prompt_version="synthetic-v1">
+  <node id="n1" order="0" kind="text" confidence="0.8">
+    <source_ref>
+      <page>1</page>
+      <asset_id null="true" />
+      <box null="true" />
+    </source_ref>
+    <content>Work &amp; energy &lt;introduction&gt;</content>
+    <extra>
+      <heading_level null="true" />
+    </extra>
   </node>
-  <node id="n2" kind="equation" page="2" confidence="0.62" asset="eq_002.png">
-    <latex>W = \int_{s_1}^{s_2} F \cos\theta \, ds</latex>
+  <node id="n2" order="1" kind="code" confidence="0.8">
+    <source_ref>
+      <page>2</page>
+      <asset_id null="true" />
+      <box null="true" />
+    </source_ref>
+    <content>print("&lt;work&gt;")
+</content>
+    <extra>
+      <language>python</language>
+    </extra>
   </node>
-  <node id="n3" kind="graph" page="3" confidence="0.41" asset="fig_003.png">
-    <description>Force on the y axis against displacement on the x axis. The area under the curve is the work done.</description>
+  <node id="n3" order="2" kind="equation" confidence="0.8">
+    <source_ref>
+      <page>3</page>
+      <asset_id null="true" />
+      <box null="true" />
+    </source_ref>
+    <content>W = \\int F \\, ds</content>
+    <extra />
   </node>
-  <node id="n4" kind="code" page="4" confidence="0.93" language="python">
-    <code>work = sum(f * dx for f, dx in zip(forces, steps))</code>
+  <node id="n4" order="3" kind="image" confidence="0.8">
+    <source_ref>
+      <page>4</page>
+      <asset_id>a4</asset_id>
+      <box null="true" />
+    </source_ref>
+    <content>A block on a ramp.</content>
+    <extra>
+      <long_description>A rope pulls the block uphill.</long_description>
+    </extra>
+  </node>
+  <node id="n5" order="4" kind="graph" confidence="0.8">
+    <source_ref>
+      <page>5</page>
+      <asset_id>a5</asset_id>
+      <box null="true" />
+    </source_ref>
+    <content>Force versus displacement.</content>
+    <extra>
+      <long_description>Force increases linearly from zero.</long_description>
+    </extra>
+  </node>
+  <node id="n6" order="5" kind="table" confidence="0.8">
+    <source_ref>
+      <page>6</page>
+      <asset_id null="true" />
+      <box null="true" />
+    </source_ref>
+    <content>Measured work</content>
+    <extra>
+      <headers>
+        <item>Object</item>
+        <item>Work (J)</item>
+      </headers>
+      <rows>
+        <item>
+          <item>Block A</item>
+          <item>40</item>
+        </item>
+      </rows>
+    </extra>
+  </node>
+  <node id="n7" order="6" kind="audio" confidence="0.8">
+    <source_ref>
+      <page null="true" />
+      <asset_id>a7</asset_id>
+      <box null="true" />
+    </source_ref>
+    <content>Lecture recording</content>
+    <extra>
+      <transcript>Synthetic untimed transcript.</transcript>
+    </extra>
+  </node>
+  <node id="n8" order="7" kind="video" confidence="0.8">
+    <source_ref>
+      <page null="true" />
+      <asset_id>a8</asset_id>
+      <box null="true" />
+    </source_ref>
+    <content>Ramp demonstration</content>
+    <extra>
+      <transcript>Synthetic untimed transcript.</transcript>
+      <visual_description>A block moves uphill.</visual_description>
+    </extra>
   </node>
 </document>

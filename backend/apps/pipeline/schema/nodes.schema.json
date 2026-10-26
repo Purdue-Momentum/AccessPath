@@ -1,0 +1,751 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "0.1-proposal"
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$"
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "const": "text"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "source_ref": {
+                "type": "object",
+                "properties": {
+                  "page": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "asset_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  },
+                  "box": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 4,
+                        "maxItems": 4
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "page",
+                  "asset_id",
+                  "box"
+                ],
+                "additionalProperties": false
+              },
+              "content": {
+                "type": "string",
+                "minLength": 1
+              },
+              "extra": {
+                "type": "object",
+                "properties": {
+                  "heading_level": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 6
+                  }
+                },
+                "required": [
+                  "heading_level"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "order",
+              "kind",
+              "confidence",
+              "source_ref",
+              "content",
+              "extra"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$"
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "const": "code"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "source_ref": {
+                "type": "object",
+                "properties": {
+                  "page": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "asset_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  },
+                  "box": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 4,
+                        "maxItems": 4
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "page",
+                  "asset_id",
+                  "box"
+                ],
+                "additionalProperties": false
+              },
+              "content": {
+                "type": "string",
+                "minLength": 1
+              },
+              "extra": {
+                "type": "object",
+                "properties": {
+                  "language": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "language"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "order",
+              "kind",
+              "confidence",
+              "source_ref",
+              "content",
+              "extra"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$"
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "const": "equation"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "source_ref": {
+                "type": "object",
+                "properties": {
+                  "page": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "asset_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  },
+                  "box": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 4,
+                        "maxItems": 4
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "page",
+                  "asset_id",
+                  "box"
+                ],
+                "additionalProperties": false
+              },
+              "content": {
+                "type": "string",
+                "minLength": 1
+              },
+              "extra": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "order",
+              "kind",
+              "confidence",
+              "source_ref",
+              "content",
+              "extra"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$"
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "const": "image"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "source_ref": {
+                "type": "object",
+                "properties": {
+                  "page": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "asset_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  },
+                  "box": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 4,
+                        "maxItems": 4
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "page",
+                  "asset_id",
+                  "box"
+                ],
+                "additionalProperties": false
+              },
+              "content": {
+                "type": "string",
+                "minLength": 1
+              },
+              "extra": {
+                "type": "object",
+                "properties": {
+                  "long_description": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "long_description"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "order",
+              "kind",
+              "confidence",
+              "source_ref",
+              "content",
+              "extra"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$"
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "const": "graph"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "source_ref": {
+                "type": "object",
+                "properties": {
+                  "page": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "asset_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  },
+                  "box": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 4,
+                        "maxItems": 4
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "page",
+                  "asset_id",
+                  "box"
+                ],
+                "additionalProperties": false
+              },
+              "content": {
+                "type": "string",
+                "minLength": 1
+              },
+              "extra": {
+                "type": "object",
+                "properties": {
+                  "long_description": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "long_description"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "order",
+              "kind",
+              "confidence",
+              "source_ref",
+              "content",
+              "extra"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$"
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "const": "table"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "source_ref": {
+                "type": "object",
+                "properties": {
+                  "page": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "asset_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  },
+                  "box": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 4,
+                        "maxItems": 4
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "page",
+                  "asset_id",
+                  "box"
+                ],
+                "additionalProperties": false
+              },
+              "content": {
+                "type": "string",
+                "minLength": 1
+              },
+              "extra": {
+                "type": "object",
+                "properties": {
+                  "headers": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "rows": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "headers",
+                  "rows"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "order",
+              "kind",
+              "confidence",
+              "source_ref",
+              "content",
+              "extra"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$"
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "const": "audio"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "source_ref": {
+                "type": "object",
+                "properties": {
+                  "page": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "asset_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  },
+                  "box": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 4,
+                        "maxItems": 4
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "page",
+                  "asset_id",
+                  "box"
+                ],
+                "additionalProperties": false
+              },
+              "content": {
+                "type": "string",
+                "minLength": 1
+              },
+              "extra": {
+                "type": "object",
+                "properties": {
+                  "transcript": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "transcript"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "order",
+              "kind",
+              "confidence",
+              "source_ref",
+              "content",
+              "extra"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^n[1-9][0-9]*$"
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "const": "video"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "source_ref": {
+                "type": "object",
+                "properties": {
+                  "page": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "asset_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  },
+                  "box": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 4,
+                        "maxItems": 4
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "page",
+                  "asset_id",
+                  "box"
+                ],
+                "additionalProperties": false
+              },
+              "content": {
+                "type": "string",
+                "minLength": 1
+              },
+              "extra": {
+                "type": "object",
+                "properties": {
+                  "transcript": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "visual_description": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "transcript",
+                  "visual_description"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "order",
+              "kind",
+              "confidence",
+              "source_ref",
+              "content",
+              "extra"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "nodes"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:accesspath:pipeline:0.1-proposal",
+  "title": "Proposed node draft contract"
+}

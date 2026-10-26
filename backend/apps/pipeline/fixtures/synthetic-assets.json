@@ -1,0 +1,18 @@
+{
+  "a4": {
+    "key": "classes/SYNTHETIC/assets/image",
+    "kind": "image"
+  },
+  "a5": {
+    "key": "classes/SYNTHETIC/assets/graph",
+    "kind": "graph"
+  },
+  "a7": {
+    "key": "classes/SYNTHETIC/assets/audio",
+    "kind": "audio"
+  },
+  "a8": {
+    "key": "classes/SYNTHETIC/assets/video",
+    "kind": "video"
+  }
+}
