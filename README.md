@@ -6,7 +6,7 @@ equation and text block. TAs and professors review and approve before anything s
 | Folder | What it is |
 |---|---|
 | `backend/` | Django API, Celery workers, PostgreSQL, S3. See [backend/README.md](backend/README.md). |
-| `frontend/` | Coming next. |
+| `frontend/` | React + JavaScript + Vite. See [frontend/README.md](frontend/README.md). |
 
 **Backend engineers, start with [backend/docs/START-HERE.md](backend/docs/START-HERE.md).**
 
