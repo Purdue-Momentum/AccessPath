@@ -11,6 +11,7 @@ def health(request):
 api_v1 = [
     path("", include("apps.accounts.urls")),
     path("", include("apps.classes.urls")),
+    path("", include("apps.exports.urls")),
 ]
 
 urlpatterns = [

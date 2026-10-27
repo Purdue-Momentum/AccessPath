@@ -5,9 +5,9 @@ info:
 paths:
   /api/v1/auth/login:
     post:
-      operationId: v1_auth_login_create
+      operationId: api_v1_auth_login_create
       tags:
-      - v1
+      - api
       requestBody:
         content:
           application/json:
@@ -32,9 +32,9 @@ paths:
           description: ''
   /api/v1/auth/logout:
     post:
-      operationId: v1_auth_logout_create
+      operationId: api_v1_auth_logout_create
       tags:
-      - v1
+      - api
       security:
       - cookieAuth: []
       responses:
@@ -42,9 +42,9 @@ paths:
           description: No response body
   /api/v1/auth/me:
     get:
-      operationId: v1_auth_me_retrieve
+      operationId: api_v1_auth_me_retrieve
       tags:
-      - v1
+      - api
       security:
       - cookieAuth: []
       responses:
@@ -56,10 +56,10 @@ paths:
           description: ''
   /api/v1/classes:
     get:
-      operationId: v1_classes_list
+      operationId: api_v1_classes_list
       description: GET my classes. POST creates a class and makes me its professor.
       tags:
-      - v1
+      - api
       security:
       - cookieAuth: []
       responses:
@@ -72,10 +72,10 @@ paths:
                   $ref: '#/components/schemas/Class'
           description: ''
     post:
-      operationId: v1_classes_create
+      operationId: api_v1_classes_create
       description: GET my classes. POST creates a class and makes me its professor.
       tags:
-      - v1
+      - api
       requestBody:
         content:
           application/json:
@@ -97,9 +97,68 @@ paths:
               schema:
                 $ref: '#/components/schemas/Class'
           description: ''
+  /api/v1/classes/{class_id}/exports/{export_id}:
+    get:
+      operationId: api_v1_classes_exports_retrieve
+      description: GET one export. The frontend polls this until status is done or
+        failed.
+      parameters:
+      - in: path
+        name: class_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: export_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Export'
+          description: ''
+  /api/v1/classes/{class_id}/exports/{export_id}/download:
+    get:
+      operationId: api_v1_classes_exports_download_retrieve
+      description: GET a short lived link to the finished HTML file.
+      parameters:
+      - in: path
+        name: class_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: export_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Download'
+          description: ''
+        '409':
+          description: No response body
   /api/v1/classes/{class_id}/lectures:
     get:
-      operationId: v1_classes_lectures_list
+      operationId: api_v1_classes_lectures_list
       parameters:
       - in: path
         name: class_id
@@ -108,7 +167,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - v1
+      - api
       security:
       - cookieAuth: []
       responses:
@@ -121,7 +180,7 @@ paths:
                   $ref: '#/components/schemas/Lecture'
           description: ''
     post:
-      operationId: v1_classes_lectures_create
+      operationId: api_v1_classes_lectures_create
       parameters:
       - in: path
         name: class_id
@@ -130,7 +189,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - v1
+      - api
       requestBody:
         content:
           application/json:
@@ -152,9 +211,70 @@ paths:
               schema:
                 $ref: '#/components/schemas/Lecture'
           description: ''
+  /api/v1/classes/{class_id}/lectures/{lecture_id}/exports:
+    get:
+      operationId: api_v1_classes_lectures_exports_list
+      description: GET this lecture's exports, newest first. POST starts a new export
+        of the lecture.
+      parameters:
+      - in: path
+        name: class_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: lecture_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Export'
+          description: ''
+    post:
+      operationId: api_v1_classes_lectures_exports_create
+      description: GET this lecture's exports, newest first. POST starts a new export
+        of the lecture.
+      parameters:
+      - in: path
+        name: class_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: lecture_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Export'
+          description: ''
+        '409':
+          description: No response body
   /api/v1/classes/{class_id}/members:
     get:
-      operationId: v1_classes_members_list
+      operationId: api_v1_classes_members_list
       parameters:
       - in: path
         name: class_id
@@ -163,7 +283,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - v1
+      - api
       security:
       - cookieAuth: []
       responses:
@@ -177,7 +297,7 @@ paths:
           description: ''
   /api/v1/classes/{class_id}/members/{membership_id}:
     patch:
-      operationId: v1_classes_members_partial_update
+      operationId: api_v1_classes_members_partial_update
       description: PATCH changes a role. DELETE removes someone. Both refuse to remove
         the last professor.
       parameters:
@@ -194,7 +314,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - v1
+      - api
       requestBody:
         content:
           application/json:
@@ -216,7 +336,7 @@ paths:
                 $ref: '#/components/schemas/Membership'
           description: ''
     delete:
-      operationId: v1_classes_members_destroy
+      operationId: api_v1_classes_members_destroy
       description: PATCH changes a role. DELETE removes someone. Both refuse to remove
         the last professor.
       parameters:
@@ -233,7 +353,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - v1
+      - api
       security:
       - cookieAuth: []
       responses:
@@ -243,9 +363,9 @@ paths:
           description: No response body
   /api/v1/onboarding:
     post:
-      operationId: v1_onboarding_create
+      operationId: api_v1_onboarding_create
       tags:
-      - v1
+      - api
       requestBody:
         content:
           application/json:
@@ -304,6 +424,72 @@ components:
       - id
       - my_role
       - name
+    Download:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+      required:
+      - url
+    Export:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        lecture:
+          type: string
+          format: uuid
+          readOnly: true
+        lecture_title:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ExportStatusEnum'
+          readOnly: true
+        error:
+          type: string
+          readOnly: true
+        check_report:
+          readOnly: true
+        version_ids:
+          readOnly: true
+        created_by_email:
+          type: string
+          format: email
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - check_report
+      - created_at
+      - created_by_email
+      - error
+      - id
+      - lecture
+      - lecture_title
+      - status
+      - updated_at
+      - version_ids
+    ExportStatusEnum:
+      enum:
+      - queued
+      - done
+      - failed
+      type: string
+      description: |-
+        * `queued` - Queued
+        * `done` - Done
+        * `failed` - Failed
     Lecture:
       type: object
       properties:

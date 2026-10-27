@@ -99,6 +99,11 @@ SPECTACULAR_SETTINGS = {
     "TITLE": "AccessPath API",
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    # Two models now have a "status" field. Pin the enum names so the schema stays stable for the frontend.
+    "ENUM_NAME_OVERRIDES": {
+        "StatusEnum": "apps.classes.models.ClassMembership.Status",
+        "ExportStatusEnum": "apps.exports.models.Export.Status",
+    },
 }
 
 # Background jobs. Separate queues so a big PDF never blocks a quick regenerate.
