@@ -1,15 +1,18 @@
 """
-Takes a list of nodes and returns one finished HTML page + any warnings.
+Lane E. Turns approved nodes into one accessible HTML page.
 
-One method per node type (text, equation, image, etc.).
-Each returns HTML that is already escaped, so the page template can insert it as is.
-Nothing here touches the database or S3, which keeps it fast to test. 
-The caller passes in a function that loads image bytes.
+One method per node kind. Each returns HTML that is already escaped, so the page
+template can insert it as is. Nothing here touches the database or S3, which keeps
+it fast to test. The caller passes in a function that loads image bytes.
+
+Two content formats are accepted, so nothing breaks while the pipeline format settles:
+  - pipeline format 0.1 (Engineer C's schema): heading_level on text, tables in
+    extra.headers and extra.rows, transcripts in extra.transcript
+  - the original format: Markdown headings, Markdown pipe tables, transcript in content
 
 The rules this code follows are written down in docs/accessibility-rules.md.
 """
 
-# Imports
 import base64
 import html
 import mimetypes
@@ -23,24 +26,26 @@ from markdown_it import MarkdownIt
 from mdit_py_plugins.dollarmath import dollarmath_plugin
 
 PAGE_LANGUAGE = "en"  # Every class is taught in English for now. See docs/accessibility-rules.md.
-ALT_TEXT_SOFT_LIMIT = 150   # Making alt text consice, warns if longer
-IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"}  # formats that can be displayed
+ALT_TEXT_SOFT_LIMIT = 150
+IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"}
 LANGUAGE_NAMES = {"python": "Python", "matlab": "MATLAB", "javascript": "JavaScript", "cpp": "C++", "c": "C",
-                  "java": "Java", "r": "R", "julia": "Julia", "sql": "SQL", "bash": "Bash"}     # language names
-AssetLoader = Callable[[str], bytes | None]     # takes S3 key and returns image bytes or None if the file is missing
+                  "java": "Java", "r": "R", "julia": "Julia", "sql": "SQL", "bash": "Bash"}
+
+AssetLoader = Callable[[str], bytes | None]
 
 
 class ExportError(Exception):
-    """A problem a TA or professor can fix."""
+    """A problem a TA or professor can fix. The message is shown to them as is."""
 
 
 @dataclass
 class NodeContent:
     """What the renderer needs from one node. Built from a Node and its current NodeVersion."""
-    kind: str       # text, equation, image, graph, code, table, video, audio...
-    content: str    # the approved text, LaTeX, Markdown, or transcript. For images and graphs this is the alt text.
-    extra: dict = field(default_factory=dict)   # optional. language, description, caption...
-    asset_key: str = ""     # location of the image or graph in S3. Empty for other kinds of nodes
+
+    kind: str
+    content: str
+    extra: dict = field(default_factory=dict)
+    asset_key: str = ""
 
 
 @dataclass
@@ -51,7 +56,9 @@ class RenderResult:
 
 def node_content(node) -> NodeContent:
     """Read a review.Node (with current_version loaded). Never changes the node."""
-    version = node.current_version      # approved version
+    version = node.current_version
+    # TODO: pipeline format 0.1 has source_ref["asset_id"] instead of a full key. Waiting on B and C
+    # for how an asset_id becomes an S3 key. Until then those figures export their description only.
     return NodeContent(kind=node.kind, content=version.content, extra=dict(version.extra or {}),
                        asset_key=(node.source_ref or {}).get("asset_key", ""))
 
@@ -59,7 +66,7 @@ def node_content(node) -> NodeContent:
 def render_lecture(*, title: str, class_label: str, nodes: list[NodeContent], load_asset: AssetLoader) -> RenderResult:
     """Build the whole page. Raises ExportError with a fixable message if any node can't be rendered."""
     renderer = _LectureRenderer(load_asset)
-    renderer.top_heading = min((lvl for n in nodes if n.kind == "text" for lvl in renderer.heading_levels(n.content)),
+    renderer.top_heading = min((lvl for n in nodes if n.kind == "text" for lvl in renderer.heading_levels(n)),
                                default=1)
     body = "\n".join(renderer.render(position, node) for position, node in enumerate(nodes, start=1))
     page = render_to_string("exports/lecture.html", {
@@ -72,6 +79,9 @@ def mathml(latex: str, *, display: str) -> str:
     latex = _strip_math_delimiters(latex)
     if not latex:
         raise ExportError("An equation is empty.")
+    # "\\int" is a line break followed by the letters i, n, t. Usually text copied from JSON without decoding.
+    if "\\begin" not in latex and re.search(r"\\\\[A-Za-z]", latex):
+        raise ExportError(f"This LaTeX has a double backslash before a command. Use one backslash: {latex}")
     try:
         out = latex_to_mathml(latex, display=display)
     except Exception as e:  # latex2mathml raises several types for broken input
@@ -121,13 +131,19 @@ class _LectureRenderer:
     # ---- one method per node kind -------------------------------------------------
 
     def text(self, node: NodeContent) -> str:
+        level = node.extra.get("heading_level")
+        if isinstance(level, int) and 1 <= level <= 6:
+            # Pipeline format 0.1: the whole node is one heading.
+            heading = " ".join(node.content.split())
+            if not heading:
+                raise ExportError("a heading is empty.")
+            tag = f"h{self._heading_level(level)}"
+            return f"<{tag}>{self._inline(heading)}</{tag}>"
         tokens = self.md.parse(node.content)
         for i, token in enumerate(tokens):
             if token.type == "heading_open":
-                wanted = int(token.tag[1]) - self.top_heading + 2  # the top level in the text becomes h2
-                level = max(2, min(wanted, self.last_heading + 1, 6))  # never skip a level
-                token.tag = tokens[i + 2].tag = f"h{level}"  # heading_open, inline, heading_close
-                self.last_heading = level
+                # heading_open, inline, heading_close
+                token.tag = tokens[i + 2].tag = f"h{self._heading_level(int(token.tag[1]))}"
         return self.md.renderer.render(tokens, self.md.options, {}).strip()
 
     def equation(self, node: NodeContent) -> str:
@@ -167,11 +183,21 @@ class _LectureRenderer:
                 f'<pre tabindex="0"><code{css}>{code}</code></pre>\n</figure>')
 
     def table(self, node: NodeContent) -> str:
-        lines = [line for line in node.content.strip().splitlines() if line.strip()]
-        if len(lines) < 2 or not _TABLE_SEPARATOR.match(lines[1]):
-            raise ExportError("this is not a Markdown table with a header row.")
-        header = _split_row(lines[0])
-        rows = [_split_row(line) for line in lines[2:]]
+        if node.extra.get("headers") is not None:
+            # Pipeline format 0.1: cells in extra.headers and extra.rows, content is the caption.
+            header = [str(cell) for cell in node.extra["headers"]]
+            rows = [[str(cell) for cell in row] for row in node.extra.get("rows") or []]
+            caption_text = node.extra.get("caption") or node.content
+        else:
+            # Original format: a Markdown pipe table in content.
+            lines = [line for line in node.content.strip().splitlines() if line.strip()]
+            if len(lines) < 2 or not _TABLE_SEPARATOR.match(lines[1]):
+                raise ExportError("this is not a Markdown table with a header row.")
+            header = _split_row(lines[0])
+            rows = [_split_row(line) for line in lines[2:]]
+            caption_text = node.extra.get("caption")
+        if not header:
+            raise ExportError("the table has no header row.")
         if any(len(row) > len(header) for row in rows):
             raise ExportError("a row has more cells than the header.")
 
@@ -179,8 +205,8 @@ class _LectureRenderer:
         number = self.tables
         caption_id = f"table-{number}-caption"
         caption = f"Table {number}."
-        if node.extra.get("caption"):
-            caption += " " + self._inline(node.extra["caption"])
+        if caption_text:
+            caption += " " + self._inline(caption_text)
         row_headers = bool(node.extra.get("row_headers"))
 
         out = [f'<div class="table-wrap" role="region" aria-labelledby="{caption_id}" tabindex="0">',
@@ -196,14 +222,37 @@ class _LectureRenderer:
         return "\n".join(out)
 
     def transcript(self, node: NodeContent) -> str:
-        # Video and audio are v2. Until then the node's content is its transcript.
-        label = "Video transcript." if node.kind == "video" else "Audio transcript."
-        return f'<div class="transcript">\n<p><strong>{label}</strong></p>\n{self._paragraphs(node.content)}\n</div>'
+        # Pipeline format 0.1: content is a title and the text is in extra.transcript.
+        # Original format: content is the transcript itself.
+        kind = "Video" if node.kind == "video" else "Audio"
+        transcript = (node.extra.get("transcript") or "").strip()
+        title = " ".join(node.content.split()) if transcript else ""
+        text = transcript or node.content
+        if not text.strip():
+            raise ExportError("there is no transcript.")
+        label = f"<strong>{kind} transcript.</strong>"
+        if title:
+            label += " " + self._inline(title)
+        out = [f"<p>{label}</p>", self._paragraphs(text)]
+        visual = (node.extra.get("visual_description") or "").strip()
+        if visual:
+            # What happens on screen, for students who can't see the video (WCAG 1.2.3).
+            out += ["<p><strong>What the video shows.</strong></p>", self._paragraphs(visual)]
+        return '<div class="transcript">\n' + "\n".join(out) + "\n</div>"
 
     # ---- helpers ------------------------------------------------------------------
 
-    def heading_levels(self, text: str) -> list[int]:
-        return [int(t.tag[1]) for t in self.md.parse(text) if t.type == "heading_open"]
+    def heading_levels(self, node: NodeContent) -> list[int]:
+        level = node.extra.get("heading_level")
+        if isinstance(level, int) and 1 <= level <= 6:
+            return [level]
+        return [int(t.tag[1]) for t in self.md.parse(node.content) if t.type == "heading_open"]
+
+    def _heading_level(self, level: int) -> int:
+        """The top level used in the lecture becomes h2, and no level is ever skipped."""
+        wanted = level - self.top_heading + 2
+        self.last_heading = max(2, min(wanted, self.last_heading + 1, 6))
+        return self.last_heading
 
     def _inline(self, text: str) -> str:
         return self.md.renderInline(str(text)).strip()

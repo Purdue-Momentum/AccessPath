@@ -70,3 +70,23 @@ def test_every_kind_rendered_together_passes():
                           load_asset=lambda key: png).html
     assert rules(page) == set()
     assert rules(page, "warning") == set()
+
+
+def test_every_kind_in_pipeline_format_0_1_passes():
+    png = b"\x89PNG\r\n\x1a\nx"
+    nodes = [
+        NodeContent("text", "Work", {"heading_level": 1}),
+        NodeContent("text", "Work is force times distance, $W = Fd$.", {"heading_level": None}),
+        NodeContent("text", "Springs", {"heading_level": 2}),
+        NodeContent("equation", r"U = \frac{1}{2} k x^2"),
+        NodeContent("image", "A block on a ramp.", {"long_description": "A rope pulls it uphill."}, "a/ramp.png"),
+        NodeContent("graph", "Force against displacement.", {"long_description": "A straight line."}, "a/fig.png"),
+        NodeContent("code", "print('<work>')", {"language": "python"}),
+        NodeContent("table", "Measured work", {"headers": ["Object", "Work (J)"], "rows": [["Block A", "40"]]}),
+        NodeContent("audio", "Recap", {"transcript": "Work is force times distance."}),
+        NodeContent("video", "Ramp demo", {"transcript": "Watch this.", "visual_description": "A block moves."}),
+    ]
+    page = render_lecture(title="Lecture 4", class_label="ME 27400 Dynamics", nodes=nodes,
+                          load_asset=lambda key: png).html
+    assert rules(page) == set()
+    assert rules(page, "warning") == set()

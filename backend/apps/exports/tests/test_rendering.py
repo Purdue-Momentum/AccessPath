@@ -61,7 +61,7 @@ def test_equation_delimiters_are_ignored():
     assert mathml("$$x^2$$", display="block") == mathml("x^2", display="block")
 
 
-@pytest.mark.parametrize("latex", [r"\SI{9.81}{m/s^2}", r"\frac{1}{", ""])
+@pytest.mark.parametrize("latex", [r"\SI{9.81}{m/s^2}", r"\frac{1}{", "", r"W = \\int F \\, ds"])
 def test_bad_latex_is_refused(latex):
     with pytest.raises(ExportError):
         render(NodeContent("equation", latex))
@@ -143,3 +143,41 @@ def test_bad_table_is_refused(table):
 def test_unknown_kind_is_refused():
     with pytest.raises(ExportError, match="kind the export does not know"):
         render(NodeContent("hologram", "?"))
+
+
+# ---- pipeline format 0.1 ---------------------------------------------------------
+
+
+def test_structured_table_uses_content_as_caption():
+    node = NodeContent("table", "Measured work", {"headers": ["Object", "Work (J)"], "rows": [["Block A", "40"]]})
+    page = render(node).html
+    assert '<caption id="table-1-caption">Table 1. Measured work</caption>' in page
+    assert '<th scope="col">Work (J)</th>' in page
+    assert "<td>Block A</td><td>40</td>" in page
+
+
+def test_structured_table_row_longer_than_header_is_refused():
+    node = NodeContent("table", "T", {"headers": ["a"], "rows": [["1", "2"]]})
+    with pytest.raises(ExportError, match="more cells"):
+        render(node)
+
+
+def test_heading_level_makes_a_real_heading():
+    page = render(NodeContent("text", "Work", {"heading_level": 1}),
+                  NodeContent("text", "Detail", {"heading_level": 3})).html
+    assert "<h2>Work</h2>" in page
+    assert "<h3>Detail</h3>" in page
+
+
+def test_audio_uses_transcript_and_title():
+    page = render(NodeContent("audio", "Lecture recording", {"transcript": "Work is force times distance."})).html
+    assert "<p><strong>Audio transcript.</strong> Lecture recording</p>" in page
+    assert "<p>Work is force times distance.</p>" in page
+
+
+def test_video_includes_visual_description():
+    node = NodeContent("video", "Ramp demonstration",
+                       {"transcript": "Watch this.", "visual_description": "A block moves uphill."})
+    page = render(node).html
+    assert "What the video shows." in page
+    assert "<p>A block moves uphill.</p>" in page
