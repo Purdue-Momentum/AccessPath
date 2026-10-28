@@ -76,7 +76,8 @@ class UploadFiles(APIView):
 
             processing_job = ProcessingJob(
                 source_file=source_file,
-                stage=ProcessingJob.Stage.CONVERT                
+                stage=ProcessingJob.Stage.CONVERT,
+                status=ProcessingJob.Status.QUEUED
             )
             processing_job.save()
 

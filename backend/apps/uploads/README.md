@@ -27,3 +27,4 @@
 - Ensure that the lecture belongs to the class
 ## Notes
 - Name is passed in to urlpatterns to ensure that reverse can be used in unit test independently of path
+- Pages will be 1-indexed

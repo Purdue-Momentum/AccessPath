@@ -1,12 +1,17 @@
-"""Lane B. Celery tasks on the convert queue."""
+import io
+import uuid
+import os
 
 from django.utils import timezone
+from django.db import transaction
 
 from celery import shared_task
 from markitdown import MarkItDown, StreamInfo
+import pymupdf
 
 from apps.storage.s3 import get_bytes, class_key, put_bytes
-from .models import SourceFile, ProcessingJob
+from apps.pipeline.tasks import process_document
+from .models import SourceFile, ProcessingJob, ParsedDocument
 
 @shared_task
 def convert_source_file(source_file_id: str) -> None:
@@ -16,13 +21,13 @@ def convert_source_file(source_file_id: str) -> None:
     try:
         source_file = SourceFile.objects.get(id=source_file_id)
     except SourceFile.DoesNotExist:
-        return f"Source file {source_file_id} not found, skipping"
+        return
 
     source_file.status = SourceFile.Status.PROCESSING
     source_file.save()
 
-    processing_job = ProcessingJob.objects.get(source_file=source_file, stage=SourceFile.Stage.CONVERT, status=SourceFile.Status.QUEUED)
-    processing_job.status = SourceFile.Status.RUNNING
+    processing_job = ProcessingJob.objects.get(source_file=source_file, stage=ProcessingJob.Stage.CONVERT, status=ProcessingJob.Status.QUEUED)
+    processing_job.status = ProcessingJob.Status.RUNNING
     processing_job.started_at = timezone.now()
     processing_job.save(update_fields=["status", "started_at"])
 
@@ -42,21 +47,67 @@ def convert_source_file(source_file_id: str) -> None:
     file_uuid = uuid.uuid4()
     stripped_name = os.path.splitext(source_file.original_name)[0]
 
-    s3_key = class_key(source_file.klass_id, "converted", file_uuid, stripped_name)
-    put_bytes(s3_key, markdown_bytes, content_type="text/markdown")
+    markdown_s3_key = class_key(source_file.klass_id, "converted", file_uuid, f"{stripped_name}.md")
+    put_bytes(markdown_s3_key, markdown_bytes, content_type="text/markdown")
 
+    processing_job.status = ProcessingJob.Status.SUCCEEDED
     processing_job.finished_at = timezone.now()
-    processing_job.save(update_fields=["finished_at"])
+    processing_job.save(update_fields=["finished_at", "status"])
 
     # Extracting figures and equations
 
     processing_job = ProcessingJob(
-        source_files=source_file,
+        source_file=source_file,
         stage=ProcessingJob.Stage.EXTRACT,
         status=ProcessingJob.Status.RUNNING,
         started_at=timezone.now()
     )
+    processing_job.save()
 
-    # Creating parsed document and queue apps.pipeline.tasks.process_document.
+    assets = []
 
-    raise NotImplementedError
+    if source_file.extension.lower() == ".pdf":
+        doc = pymupdf.open(stream=file_bytes, filetype="pdf")
+        for page in doc:
+            for image_info in page.get_images():
+                xref = image_info[0]
+                image = doc.extract_image(xref)
+                image_bytes = image["image"]
+                
+                # Doesn't include the '.', e.g. 'jpeg'
+                image_extension = image["ext"]
+
+                image_uuid = uuid.uuid4()
+                image_s3_key = class_key(
+                    source_file.klass_id,
+                    "assets",
+                    image_uuid,
+                    f"image_p{page.number + 1}-{xref}.{image_extension}"
+                )
+
+                put_bytes(image_s3_key, image_bytes, content_type=f"image/{image_extension}")
+
+                rects = page.get_image_rects(xref)
+
+                for rect in rects:
+                    assets.append({
+                        "key": image_s3_key,
+                        "kind": "image",
+                        "page": page.number + 1,
+                        "box": list(rect)
+                    })
+    
+    processing_job.status = ProcessingJob.Status.SUCCEEDED
+    processing_job.finished_at = timezone.now()
+    processing_job.save(update_fields=["finished_at", "status"])
+
+    # Creating parsed document and queue apps.pipeline.tasks.process_document
+
+    parsed_document = ParsedDocument(
+        source_file=source_file,
+        markdown_s3_key=markdown_s3_key,
+        assets=assets
+    )
+    parsed_document.save()
+
+    transaction.on_commit(lambda pd_id=parsed_document.id: process_document.delay(pd_id))
