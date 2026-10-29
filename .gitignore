@@ -1,0 +1,13 @@
+# AWS Agent Toolkit / MCP / credentials — keep local, do not commit.
+# These may contain profile names, account-scoped config, or credential paths.
+.kiro/settings/mcp.json
+.aws/
+aws-mcp*.json
+
+# AWS CLI / toolkit caches
+.aws-sam/
+**/.aws/cli/cache/
+
+# uv
+.venv/
+__pycache__/
