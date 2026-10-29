@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lecture 4. Work and Energy | ME 27400 Dynamics, Fall 2026</title>
+  <style>
+    :root { color-scheme: light dark; --text: #1a1a1a; --bg: #ffffff; --muted: #4a4a4a; --line: #767676;
+            --panel: #f3f3f3; --link: #0b57d0; }
+    @media (prefers-color-scheme: dark) {
+      :root { --text: #f2f2f2; --bg: #121212; --muted: #c8c8c8; --line: #8a8a8a; --panel: #1e1e1e; --link: #8ab4f8; }
+    }
+    body { margin: 0; background: var(--bg); color: var(--text); line-height: 1.6;
+           font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; font-size: 1.125rem; }
+    main { max-width: 46rem; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+    .course { color: var(--muted); margin: 0; }
+    h1 { line-height: 1.25; margin: 0.25rem 0 1.5rem; }
+    h2, h3, h4, h5, h6 { line-height: 1.3; margin: 2rem 0 0.75rem; }
+    a { color: var(--link); }
+    :focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
+    figure { margin: 1.5rem 0; }
+    img { max-width: 100%; height: auto; display: block; }
+    figcaption { color: var(--muted); margin-top: 0.5rem; }
+    .figure-label { font-weight: 600; color: var(--text); }
+    .figure-description { border-left: 4px solid var(--line); padding-left: 1rem; }
+    .equation { overflow-x: auto; overflow-y: hidden; padding: 0.25rem 0; margin: 1rem 0; }
+    math { font-size: 1.15em; }
+    pre { background: var(--panel); border: 1px solid var(--line); padding: 1rem; overflow-x: auto;
+          font-size: 1rem; line-height: 1.5; }
+    .table-wrap { overflow-x: auto; margin: 1.5rem 0; }
+    table { border-collapse: collapse; min-width: 50%; }
+    caption { text-align: left; font-weight: 600; padding-bottom: 0.5rem; }
+    th, td { border: 1px solid var(--line); padding: 0.4rem 0.75rem; text-align: left; vertical-align: top; }
+    thead th { background: var(--panel); }
+    .transcript { border-left: 4px solid var(--line); padding-left: 1rem; }
+  </style>
+</head>
+<body>
+<main>
+<p class="course">ME 27400 Dynamics, Fall 2026</p>
+<h1>Lecture 4. Work and Energy</h1>
+<p>Work is the integral of force along a path.</p>
+<div class="equation" tabindex="0"><math alttext="W = \int_{s_1}^{s_2} F \cos\theta \, ds" xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>W</mi><mo>&#x0003D;</mo><msubsup><mo>&#x0222B;</mo><mrow><msub><mi>s</mi><mn>1</mn></msub></mrow><mrow><msub><mi>s</mi><mn>2</mn></msub></mrow></msubsup><mi>F</mi><mi>cos</mi><mi>&#x003B8;</mi><mspace width="0.167em" /><mi>d</mi><mi>s</mi></mrow></math></div>
+<figure>
+<img src="data:image/png;base64,iVBORw0KGgpmYWtl" alt="Force on the y axis against displacement on the x axis. The area under the curve is the work done.">
+<figcaption><span class="figure-label">Figure 1.</span></figcaption>
+</figure>
+<figure class="code">
+<figcaption>Python code</figcaption>
+<pre tabindex="0"><code class="language-python">work = sum(f * dx for f, dx in zip(forces, steps))</code></pre>
+</figure>
+</main>
+</body>
+</html>

@@ -19,3 +19,12 @@ class Export(BaseModel):
     html_s3_key = models.CharField(max_length=500, blank=True)
     # The exact NodeVersion ids that went into this export, so it can be reproduced later.
     version_ids = models.JSONField(default=list, blank=True)
+    error = models.TextField(blank=True)    #reason for error
+    # Accessibility check results: [{"level": "warning", "rule": "..", "message": ".."}]
+    check_report = models.JSONField(default=list, blank=True) 
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Export of {self.lecture} ({self.status})"
