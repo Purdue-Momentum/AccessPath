@@ -1,0 +1,133 @@
+{
+  "schema_version": "0.1-proposal",
+  "nodes": [
+    {
+      "id": "n1",
+      "order": 0,
+      "kind": "text",
+      "confidence": 0.8,
+      "source_ref": {
+        "page": 1,
+        "asset_id": null,
+        "box": null
+      },
+      "content": "Work & energy <introduction>",
+      "extra": {
+        "heading_level": null
+      }
+    },
+    {
+      "id": "n2",
+      "order": 1,
+      "kind": "code",
+      "confidence": 0.8,
+      "source_ref": {
+        "page": 2,
+        "asset_id": null,
+        "box": null
+      },
+      "content": "print(\"<work>\")\n",
+      "extra": {
+        "language": "python"
+      }
+    },
+    {
+      "id": "n3",
+      "order": 2,
+      "kind": "equation",
+      "confidence": 0.8,
+      "source_ref": {
+        "page": 3,
+        "asset_id": null,
+        "box": null
+      },
+      "content": "W = \\\\int F \\\\, ds",
+      "extra": {}
+    },
+    {
+      "id": "n4",
+      "order": 3,
+      "kind": "image",
+      "confidence": 0.8,
+      "source_ref": {
+        "page": 4,
+        "asset_id": "a4",
+        "box": null
+      },
+      "content": "A block on a ramp.",
+      "extra": {
+        "long_description": "A rope pulls the block uphill."
+      }
+    },
+    {
+      "id": "n5",
+      "order": 4,
+      "kind": "graph",
+      "confidence": 0.8,
+      "source_ref": {
+        "page": 5,
+        "asset_id": "a5",
+        "box": null
+      },
+      "content": "Force versus displacement.",
+      "extra": {
+        "long_description": "Force increases linearly from zero."
+      }
+    },
+    {
+      "id": "n6",
+      "order": 5,
+      "kind": "table",
+      "confidence": 0.8,
+      "source_ref": {
+        "page": 6,
+        "asset_id": null,
+        "box": null
+      },
+      "content": "Measured work",
+      "extra": {
+        "headers": [
+          "Object",
+          "Work (J)"
+        ],
+        "rows": [
+          [
+            "Block A",
+            "40"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "n7",
+      "order": 6,
+      "kind": "audio",
+      "confidence": 0.8,
+      "source_ref": {
+        "page": null,
+        "asset_id": "a7",
+        "box": null
+      },
+      "content": "Lecture recording",
+      "extra": {
+        "transcript": "Synthetic untimed transcript."
+      }
+    },
+    {
+      "id": "n8",
+      "order": 7,
+      "kind": "video",
+      "confidence": 0.8,
+      "source_ref": {
+        "page": null,
+        "asset_id": "a8",
+        "box": null
+      },
+      "content": "Ramp demonstration",
+      "extra": {
+        "transcript": "Synthetic untimed transcript.",
+        "visual_description": "A block moves uphill."
+      }
+    }
+  ]
+}
