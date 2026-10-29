@@ -1,4 +1,4 @@
-from django.contrib import admin
+﻿from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
@@ -13,6 +13,7 @@ api_v1 = [
     path("", include("apps.classes.urls")),
     path("", include("apps.uploads.urls")),
     path("", include("apps.exports.urls")),
+    path("", include("apps.review.urls")),
 ]
 
 urlpatterns = [
