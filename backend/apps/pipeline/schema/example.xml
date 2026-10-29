@@ -29,7 +29,7 @@
       <asset_id null="true" />
       <box null="true" />
     </source_ref>
-    <content>W = \\int F \\, ds</content>
+    <content>W = \int_{s_1}^{s_2} F \cos\theta \, ds</content>
     <extra />
   </node>
   <node id="n4" order="3" kind="image" confidence="0.8">

@@ -41,7 +41,7 @@
         "asset_id": null,
         "box": null
       },
-      "content": "W = \\\\int F \\\\, ds",
+      "content": "W = \\int_{s_1}^{s_2} F \\cos\\theta \\, ds",
       "extra": {}
     },
     {

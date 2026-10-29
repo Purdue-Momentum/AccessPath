@@ -9,7 +9,7 @@ from apps.classes.models import Class, Lecture
 from apps.uploads.models import SourceFile
 
 @pytest.mark.django_db
-@patch("apps.storage.s3.put_bytes")
+@patch("apps.uploads.views.put_bytes")
 def test_upload_files_success(mock_put_bytes, client, make_user):
   user = make_user()
   client.force_login(user=user)
