@@ -1,5 +1,5 @@
 """
-Lane E. Turns approved nodes into one accessible HTML page.
+Turns approved nodes into one accessible HTML page.
 
 One method per node kind. Each returns HTML that is already escaped, so the page
 template can insert it as is. Nothing here touches the database or S3, which keeps
@@ -24,6 +24,8 @@ from django.template.loader import render_to_string
 from latex2mathml.converter import convert as latex_to_mathml
 from markdown_it import MarkdownIt
 from mdit_py_plugins.dollarmath import dollarmath_plugin
+
+from .speech import mathml_to_words
 
 PAGE_LANGUAGE = "en"  # Every class is taught in English for now. See docs/accessibility-rules.md.
 ALT_TEXT_SOFT_LIMIT = 150
@@ -62,7 +64,7 @@ def node_content(node) -> NodeContent:
     return NodeContent(kind=node.kind, content=version.content, extra=dict(version.extra or {}),
                        asset_key=(node.source_ref or {}).get("asset_key", ""))
 
-
+# for the whole lecture, renders all nodes into one HTML page
 def render_lecture(*, title: str, class_label: str, nodes: list[NodeContent], load_asset: AssetLoader) -> RenderResult:
     """Build the whole page. Raises ExportError with a fixable message if any node can't be rendered."""
     renderer = _LectureRenderer(load_asset)
@@ -73,7 +75,7 @@ def render_lecture(*, title: str, class_label: str, nodes: list[NodeContent], lo
         "lang": PAGE_LANGUAGE, "title": title, "class_label": class_label, "body": body})
     return RenderResult(html=page, warnings=renderer.warnings)
 
-
+# latex to mathml conversion. validates if input can be converted properly
 def mathml(latex: str, *, display: str) -> str:
     """LaTeX to MathML. Refuses anything latex2mathml could not really convert."""
     latex = _strip_math_delimiters(latex)
@@ -130,6 +132,7 @@ class _LectureRenderer:
 
     # ---- one method per node kind -------------------------------------------------
 
+    # for text type of node
     def text(self, node: NodeContent) -> str:
         level = node.extra.get("heading_level")
         if isinstance(level, int) and 1 <= level <= 6:
@@ -146,10 +149,15 @@ class _LectureRenderer:
                 token.tag = tokens[i + 2].tag = f"h{self._heading_level(int(token.tag[1]))}"
         return self.md.renderer.render(tokens, self.md.options, {}).strip()
 
+    # for the equation type of node
     def equation(self, node: NodeContent) -> str:
         # tabindex: a wide equation scrolls sideways on a phone, and keyboard users must be able to reach it.
-        return f'<div class="equation" tabindex="0">{mathml(node.content, display="block")}</div>'
-
+        math = mathml(node.content, display="block")
+        # The same equation in plain words, for read-aloud tools that only read the visible characters.
+        words = html.escape(mathml_to_words(math))
+        return (f'<div class="equation" tabindex="0">{math}</div>\n'
+                f'<p class="math-words"><span class="math-words-label">In words:</span> {words}</p>')
+    # for the figure type of node
     def figure(self, node: NodeContent) -> str:
         self.figures += 1
         number = self.figures
@@ -173,6 +181,7 @@ class _LectureRenderer:
             caption += " " + self._paragraphs(long_description, inline_first=True)
         return f"<figure>\n{image}\n<figcaption>{caption}</figcaption>\n</figure>"
 
+    # for the code type of node
     def code(self, node: NodeContent) -> str:
         language = re.sub(r"[^a-z0-9+#-]", "", (node.extra.get("language") or "").lower())
         label = LANGUAGE_NAMES.get(language, language.capitalize())
@@ -182,6 +191,7 @@ class _LectureRenderer:
         return (f'<figure class="code">\n<figcaption>{caption}</figcaption>\n'
                 f'<pre tabindex="0"><code{css}>{code}</code></pre>\n</figure>')
 
+    # for the table type of node 
     def table(self, node: NodeContent) -> str:
         if node.extra.get("headers") is not None:
             # Pipeline format 0.1: cells in extra.headers and extra.rows, content is the caption.
@@ -219,8 +229,12 @@ class _LectureRenderer:
                      else f"<td>{self._inline(cell)}</td>" for i, cell in enumerate(row)]
             out.append("<tr>" + "".join(cells) + "</tr>")
         out += ["</tbody>", "</table>", "</div>"]
+        sentences = self._table_sentences(number, header, rows)
+        if sentences:
+            out.append(sentences)
         return "\n".join(out)
 
+    # for the transcript type of node 
     def transcript(self, node: NodeContent) -> str:
         # Pipeline format 0.1: content is a title and the text is in extra.transcript.
         # Original format: content is the transcript itself.
@@ -253,6 +267,24 @@ class _LectureRenderer:
         wanted = level - self.top_heading + 2
         self.last_heading = max(2, min(wanted, self.last_heading + 1, 6))
         return self.last_heading
+
+
+    def _table_sentences(self, number: int, header: list[str], rows: list[list[str]]) -> str:
+        """Each row as a sentence, e.g. "Rope tension. Work (J): 60.0; Sign: Positive." Read-aloud tools read
+        tables cell by cell with no headers, so this gives them a version that makes sense. Closed by default."""
+        items = []
+        for row in rows:
+            row = row + [""] * (len(header) - len(row))
+            label = self._inline(row[0])
+            pairs = zip(header[1:], row[1:], strict=True)  # same length: the row was padded above
+            parts = [f"{self._inline(h)}: {self._inline(c)}" for h, c in pairs if c.strip()]
+            if label or parts:
+                items.append(f"<li>{label}{'. ' if label and parts else ''}{'; '.join(parts)}.</li>")
+        if not items:
+            return ""
+        return (f'<details class="table-words">\n<summary>Table {number} read as sentences</summary>\n<ul>\n'
+                + "\n".join(items) + "\n</ul>\n</details>")
+
 
     def _inline(self, text: str) -> str:
         return self.md.renderInline(str(text)).strip()

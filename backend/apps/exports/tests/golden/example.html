@@ -25,6 +25,10 @@
     .figure-description { border-left: 4px solid var(--line); padding-left: 1rem; }
     .equation { overflow-x: auto; overflow-y: hidden; padding: 0.25rem 0; margin: 1rem 0; }
     math { font-size: 1.15em; }
+    .math-words { color: var(--muted); margin: -0.5rem 0 1.25rem; }
+    .math-words-label, .table-words summary { font-weight: 600; color: var(--text); }
+    .table-words { margin: -0.75rem 0 1.5rem; }
+    .table-words summary { cursor: pointer; }
     pre { background: var(--panel); border: 1px solid var(--line); padding: 1rem; overflow-x: auto;
           font-size: 1rem; line-height: 1.5; }
     .table-wrap { overflow-x: auto; margin: 1.5rem 0; }
@@ -41,6 +45,7 @@
 <h1>Lecture 4. Work and Energy</h1>
 <p>Work is the integral of force along a path.</p>
 <div class="equation" tabindex="0"><math alttext="W = \int_{s_1}^{s_2} F \cos\theta \, ds" xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mi>W</mi><mo>&#x0003D;</mo><msubsup><mo>&#x0222B;</mo><mrow><msub><mi>s</mi><mn>1</mn></msub></mrow><mrow><msub><mi>s</mi><mn>2</mn></msub></mrow></msubsup><mi>F</mi><mi>cos</mi><mi>&#x003B8;</mi><mspace width="0.167em" /><mi>d</mi><mi>s</mi></mrow></math></div>
+<p class="math-words"><span class="math-words-label">In words:</span> W equals the integral from s sub 1 to s sub 2 of F cosine theta d s</p>
 <figure>
 <img src="data:image/png;base64,iVBORw0KGgpmYWtl" alt="Force on the y axis against displacement on the x axis. The area under the curve is the work done.">
 <figcaption><span class="figure-label">Figure 1.</span></figcaption>
