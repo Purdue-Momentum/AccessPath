@@ -181,3 +181,21 @@ def test_video_includes_visual_description():
     page = render(node).html
     assert "What the video shows." in page
     assert "<p>A block moves uphill.</p>" in page
+
+
+def test_equation_has_words_for_read_aloud():
+    page = render(NodeContent("equation", r"T = \frac{1}{2} m v^2")).html
+    assert ('<p class="math-words"><span class="math-words-label">In words:</span> '
+            "T equals one half m v squared</p>") in page
+
+
+def test_table_can_be_read_as_sentences():
+    node = NodeContent("table", "Work", {"headers": ["Force", "Work (J)", "Sign"],
+                                         "rows": [["Rope tension", "60.0", "Positive"]]})
+    page = render(node).html
+    assert "<summary>Table 1 read as sentences</summary>" in page
+    assert "<li>Rope tension. Work (J): 60.0; Sign: Positive.</li>" in page
+
+
+def test_table_with_no_rows_has_no_sentences():
+    assert "<details" not in render(NodeContent("table", "Empty", {"headers": ["A", "B"], "rows": []})).html

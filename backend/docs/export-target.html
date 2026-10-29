@@ -13,6 +13,10 @@
     body { margin: 0; background: var(--bg); color: var(--text); line-height: 1.6;
            font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; font-size: 1.125rem; }
     main { max-width: 46rem; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+    .math-words { color: var(--muted); margin: -0.5rem 0 1.25rem; }
+    .math-words-label, .table-words summary { font-weight: 600; color: var(--text); }
+    .table-words { margin: -0.75rem 0 1.5rem; }
+    .table-words summary { cursor: pointer; }
     .course { color: var(--muted); margin: 0; }
     h1 { line-height: 1.25; margin: 0.25rem 0 1.5rem; }
     h2, h3, h4, h5, h6 { line-height: 1.3; margin: 2rem 0 0.75rem; }
@@ -25,6 +29,7 @@
     .figure-description { border-left: 4px solid var(--line); padding-left: 1rem; }
     .equation { overflow-x: auto; overflow-y: hidden; padding: 0.25rem 0; margin: 1rem 0; }
     math { font-size: 1.15em; }
+    
     pre { background: var(--panel); border: 1px solid var(--line); padding: 1rem; overflow-x: auto;
           font-size: 1rem; line-height: 1.5; }
     .table-wrap { overflow-x: auto; margin: 1.5rem 0; }
@@ -63,6 +68,7 @@
       </mrow>
     </math>
   </div>
+  <p class="math-words"><span class="math-words-label">In words:</span> W equals the integral from s sub 1 to s sub 2 of F cosine theta d s</p>
 
   <!-- n3, kind="graph". Image embedded in the file. Short alt text. Numbered caption. -->
   <figure>
