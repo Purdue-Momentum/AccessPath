@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Class, ClassMembership, Lecture
+from .models import Class, ClassMembership, Invite, Lecture
 
 
 class ClassSerializer(serializers.ModelSerializer):
@@ -36,3 +36,21 @@ class LectureSerializer(serializers.ModelSerializer):
         model = Lecture
         fields = ["id", "title", "order", "ta_context", "created_at"]
         read_only_fields = ["id", "created_at"]
+
+
+class InviteCreateSerializer(serializers.ModelSerializer):
+    """Validates invite creation input and exposes the raw token exactly once.
+
+    `token` is read-only and only ever populated by the view on the 201 create
+    response; it is never a stored field, so serializing an existing Invite row
+    yields no token.
+    """
+
+    email = serializers.EmailField()
+    role = serializers.ChoiceField(choices=ClassMembership.Role.choices)
+    token = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = Invite
+        fields = ["id", "email", "role", "expires_at", "token"]
+        read_only_fields = ["id", "expires_at", "token"]

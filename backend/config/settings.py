@@ -89,10 +89,23 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# Cache backend. Throttling counts requests here, so it needs a defined
+# backend. Local-memory is per-process only; in production this should point at
+# a shared cache (e.g. Redis via the existing REDIS_URL) so throttling counts
+# hold across worker processes.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "accesspath-local",
+    }
+}
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Rate for the invite-accept endpoint only (scoped on the view, not global).
+    "DEFAULT_THROTTLE_RATES": {"invite-accept": env("INVITE_ACCEPT_THROTTLE", default="10/min")},
 }
 
 SPECTACULAR_SETTINGS = {
@@ -123,6 +136,9 @@ S3_PRESIGN_SECONDS = env.int("S3_PRESIGN_SECONDS", default=900)
 ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default=None)
 LLM_STRONG_MODEL = env("LLM_STRONG_MODEL", default="claude-sonnet-5-5")
 LLM_CHEAP_MODEL = env("LLM_CHEAP_MODEL", default="claude-haiku-5-5")
+
+# Invites. How long a class invitation stays valid before it expires.
+INVITE_TTL_HOURS = env.int("INVITE_TTL_HOURS", default=72)
 
 # Uploads
 MAX_UPLOAD_BYTES = env.int("MAX_UPLOAD_BYTES", default=200 * 1024 * 1024)

@@ -9,6 +9,12 @@ def membership_for(user, class_id):
     ).first()
 
 
+def is_active_professor(user, class_id) -> bool:
+    """True only if the user is an active professor of the class (not just a member)."""
+    m = membership_for(user, class_id)
+    return m is not None and m.role == ClassMembership.Role.PROFESSOR
+
+
 class IsClassMember(BasePermission):
     """Allows the request only if the user is an active member of the class in the URL."""
 
