@@ -18,6 +18,11 @@ SECRET_KEY = env("DJANGO_SECRET_KEY", default="dev-only-not-secret")
 DEBUG = env.bool("DJANGO_DEBUG", default=True)
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
+# Origins allowed to make unsafe (POST/PUT/DELETE) requests. Django checks the
+# browser's Origin header against this list for CSRF. The Vite dev server runs
+# at http://localhost:5173; in production set this to the deployed frontend URL.
+CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=["http://localhost:5173"])
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
