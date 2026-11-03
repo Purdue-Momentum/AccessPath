@@ -212,7 +212,7 @@ verify narrower behavior; they are not production readiness or accessibility pro
 - Intended working branch: **`track-c`**. Verified current branch on 2026-11-02:
   **`track-c`**. Original baseline: `a52b3260afb09a77ce37862b572997f4d2c09309`;
   fast-forwarded to integration `fbf53ca0c8165c00a1f58d751d296d291e7701ef`;
-  current implementation edits are uncommitted.
+  the implementation delivery is recorded in section 6 below.
 - Actual root: `/Users/Gaurav/Desktop/projects/access-path/AccessPath`. Its remote is
   `https://github.com/hankjacoby9-cpu/AccessPath.git`. The parent `access-path/` has a
   separate empty Git repository; do not confuse its history with this checkout.
@@ -248,7 +248,7 @@ verify narrower behavior; they are not production readiness or accessibility pro
 
 ### What exists today
 
-The current uncommitted implementation adds Purdue configuration/client, versioned
+The current implementation adds Purdue configuration/client, versioned
 prompts, input normalization/chunking, text and vision drafting, transactional initial
 node publication, durable claims, usage/failure logging and revision drafts. See
 [RUNNING.md](RUNNING.md) for public functions, commands and exact boundaries.
@@ -421,7 +421,7 @@ passed as recorded above; no full backend, paid AI or accessibility evaluation w
 run. B/D/E contract approval and lifecycle interfaces remain blockers. Next: review
 B's existing samples, confirm the proposed handoffs, and agree the next increment.
 
-### Uncommitted work: 2026-11-02 Purdue implementation
+### Engineer C delivery: Purdue processing and revisions (2026-11-03)
 
 Practical effect: B's existing processing entry point now generates drafts and creates
 reviewable nodes, instead of raising NotImplementedError. C also prepares and can
@@ -429,10 +429,25 @@ apply version-safe revision drafts through an explicit D integration contract.
 
 New/changed pipeline areas: configuration.py, router.py, client.py, prompts.py,
 drafting.py, processing.py, tasks.py, service.py, models.py, migration 0002, admin.py,
-management commands, client/processing tests, RUNNING.md and this guide. No new
-commit exists for this increment. Earlier `dafe1ff` and `b6472c7` remain the actual
-committed C deliveries. The fast-forward brought in 37 existing integration commits;
-those are not new work authored in this increment.
+management commands, client/processing tests, RUNNING.md, this guide and the approved
+shared `.env.example` update.
+
+- **Hash:** `4dbabd9754a3afc40333518e588f0f5cfd39197f`
+- **Date:** 2026-11-03 14:08:59 −05:00.
+- **Title:** feat(pipeline): process documents and prepare revisions with Purdue GenAI.
+- **Author:** gaurav <gaurav14rsm@gmail.com>, using existing Git configuration.
+- **Reason:** Replace C's processing stub and provide a usable Purdue-based path from
+  B's extracted content to reviewable nodes, plus version-safe revision drafts.
+- **Validation:** 49 pipeline tests passed; full suite 197 passed / 1 known export
+  golden failure. Pipeline Ruff, Django system and migration checks passed. Two
+  successful synthetic live calls were recorded on 2026-11-02. Secret checks passed.
+- **Limitations:** D must connect review completion; the C/E golden example remains
+  unresolved. Real S3/Redis end-to-end and PostgreSQL concurrency tests remain pending.
+
+Earlier `dafe1ff` and `b6472c7` remain historical C deliveries. The fast-forward
+also brought in 37 existing integration commits; those are not new C-authored work.
+A final documentation-only commit records this hash. Its own hash is intentionally
+not recorded here to avoid an endless chain of logging commits.
 
 All implementation changes remain inside pipeline. The user separately approved the
 shared `backend/.env.example` update on 2026-11-03: Purdue variables with an empty
@@ -472,8 +487,9 @@ model calls were needed for this publication review.
 - [ ] **B dependency:** richer page/asset ordering and extraction, plus upload ownership checks.
 - [ ] **Pending validation:** PostgreSQL concurrency, real S3/Redis processing and representative
   accessibility evaluation. Synthetic success does not complete these checks.
-- [ ] Review the uncommitted diff and commit/push when requested; no publication was performed
-  for this implementation increment.
+- [x] Review and commit the approved implementation and example configuration.
+  Push only track-c; verify the remote tip after publication. The final execution
+  report records push verification without adding another self-referential log commit.
 
 ## 8. Maintaining this guide
 
@@ -497,7 +513,7 @@ Read-only reviews can update this guide only when the user's task permits editin
 
 1. Read the official C brief, applicable instructions, this guide and [RUNNING.md](RUNNING.md).
    The shared brief still mentions Anthropic; the user's Purdue decision supersedes that provider choice.
-2. Verify track-c, HEAD and git status. Preserve the current uncommitted pipeline implementation.
+2. Verify track-c, HEAD and git status. Preserve any new local work; the Purdue implementation is now committed.
 3. Run `pytest apps/pipeline/tests -q` and inspect the D handoff before adding more integration.
 4. Coordinate D's completion API and the C/E fixture decision. Do not edit either lane without
    authorization. The next meaningful validation is a representative S3/Redis document run and
