@@ -1,6 +1,6 @@
 # Engineer C: project context, work history and handoff
 
-Last verified: **2026-10-26**, America/Indiana/Indianapolis.
+Last verified: **2026-11-03**, America/Indiana/Indianapolis.
 
 This is a continuity guide for a new engineer, a new AI session or a reader without
 programming experience. It does not override applicable `AGENTS.md` instructions,
@@ -75,13 +75,13 @@ bulk updates/deletion are not comprehensively prohibited by that save method.
 ## 2. Architecture and ownership
 
 The frontend is the browser-facing React/Vite application. On this branch it is a
-placeholder home screen. Django and Django REST Framework supply the backend and
+login/signup and dashboard scaffold. Django and Django REST Framework supply the backend and
 API. PostgreSQL is the intended full-stack database; local settings fall back to a
 SQLite file. Celery supplies workers, with Redis holding queued work. S3 stores files;
 MinIO provides an S3-compatible local substitute.
 
 ```text
-Browser: React frontend (currently a placeholder)
+Browser: React frontend (login/signup scaffold)
                   |
                   v
 Django API / admin -----> database: records, content versions, review history
@@ -90,11 +90,11 @@ Django API / admin -----> database: records, content versions, review history
        +----> shared storage helpers ----> private S3 / local MinIO: files
        |
        +----> Redis queues ----> Celery worker
-                convert          B: conversion/extraction (planned on track-c)
-                llm              C: AI processing/revision (planned)
-                export           E: HTML creation (planned)
+                convert          B: conversion and PDF image extraction
+                llm              C: Purdue processing and revision drafts
+                export           E: HTML creation and accessibility checks
                                       |
-                                      +--> Anthropic AI service (planned calls)
+                                      +--> Purdue GenAI Studio (text and image calls)
 ```
 
 The diagram shows intended connections. Infrastructure configuration exists; it does
@@ -105,7 +105,7 @@ not demonstrate that jobs or external services are running. See
 | --- | --- | --- |
 | A | Accounts, class membership and permissions, platform configuration and storage helpers | `backend/apps/accounts/`, `classes/`, `storage/`, and `backend/config/`; other lanes use public helpers. |
 | B | Upload handling, conversion to Markdown and extraction of figures/equations | `backend/apps/uploads/`; supplies C's input. |
-| C | AI drafts, confidence, model selection, node contract, revision and model-usage logging | `backend/apps/pipeline/`; current authorization covers contract work only. |
+| C | AI drafts, confidence, model selection, node contract, revision and model-usage logging | `backend/apps/pipeline/`; new edits remain pipeline-only; D integration is deferred. |
 | D | Review API, queues, edits, comments, approvals and review state rules | `backend/apps/review/`; calls C's public revision function. |
 | E | Accessible HTML from approved content and accessibility checks | `backend/apps/exports/`; depends on C's content format and D's approved versions. |
 
@@ -134,7 +134,7 @@ AccessPath/                         actual repository root
       pipeline/                    C's owned area
         models.py migrations/      model-usage table definition and creation history
         router.py                  inexpensive/strong model selection
-        tasks.py service.py        processing and revision stubs
+        tasks.py service.py        processing and revision-draft tasks
         contract.py                pure validation/serialization code
         schema/                    proposed JSON schema, XML example and contract
         fixtures/                  synthetic draft-output examples on this branch
@@ -149,110 +149,70 @@ objects in a live storage account.
 
 | Information | Record/location | Current limitation |
 | --- | --- | --- |
-| Original upload | S3 object; `uploads.SourceFile.s3_key` plus name, type, checksum and size | Upload workflow is not connected on this branch. |
-| Converted Markdown | S3 object referenced by `ParsedDocument.markdown_s3_key` | Conversion task is a stub on track-c. |
+| Original upload | S3 object; `uploads.SourceFile.s3_key` plus name, type, checksum and size | Upload endpoint and task wiring now exist; B ownership checks remain incomplete. |
+| Converted Markdown | S3 object referenced by `ParsedDocument.markdown_s3_key` | B converts Markdown and extracts embedded PDF images. |
 | Extracted assets | S3 objects described by `ParsedDocument.assets` | Exact manifest and coordinate rules need agreement. |
-| Generated XML | Proposed S3 snapshot referenced by `ParsedDocument.xml_s3_key` | Serializer exists locally; upload/persistence does not. |
-| Nodes and drafts | Database `review.Node` and `review.NodeVersion` | Models and demo seeding exist; C does not create them yet. |
-| Reviewer discussion and actions | Database `Comment` and `ReviewAction` | State-change helper exists; review endpoints are missing. |
-| File/job progress | `SourceFile.status/error`; `ProcessingJob.stage/status/error/started_at/finished_at` | Status definitions exist; lifecycle ownership and updates are incomplete. |
-| AI usage | Database `pipeline.LLMCall` | Fields for model, purpose, tokens, cache reads, cost and latency; no automatic recording yet. |
-| Export | `exports.Export.html_s3_key` and `version_ids` | Task to create HTML is a stub. |
+| Generated XML | Proposed S3 snapshot referenced by `ParsedDocument.xml_s3_key` | C now uploads a validated initial snapshot; it is not rewritten after revision. |
+| Nodes and drafts | Database `review.Node` and `review.NodeVersion` | C creates initial nodes/versions; D must wire revision completion. |
+| Reviewer discussion and actions | Database `Comment` and `ReviewAction` | D review endpoints exist; AI completion transitions are still missing. |
+| File/job progress | `SourceFile.status/error`; `ProcessingJob.stage/status/error/started_at/finished_at` | C now tracks its process stage and source completion/failure. |
+| AI usage | Database `pipeline.LLMCall` | C logs each provider attempt, usage and latency; unknown cost is null. |
+| Export | `exports.Export.html_s3_key` and `version_ids` | E renders approved versions, checks HTML and saves the export. |
 
 Use `apps/storage/s3.py` for storage access. Its `class_key` helper builds names under
 `classes/<class_id>/`; it does not itself prove that a caller is authorized for that
 class. Permissions and trusted input resolution remain the caller's responsibility.
 
-## 3. Intended journey and actual implementation
+## 3. Current workflow (2026-11-02)
 
 ```text
-[IMPLEMENTED helpers/API] A: accounts, classes and lectures
-                       |
-[PLANNED connection] B: upload API -> original file in S3
-                       |
-[STUB on track-c] B: conversion/extraction -> ParsedDocument + Markdown/assets
-                       |
-[STUB] C: processing -> AI JSON -> validated XML -> Node + version 1
-                       |              ^
-                       |       [LOCAL DRAFT IMPLEMENTED]
-                       |       contract validator/serializer only
-                       v
-[IMPLEMENTED helper; API missing] D: TA review -> professor review
-                       |                               |
-                       | send back                     | approve
-                       v                               v
-[STUB] C: revision -> new version           [STUB] E: approved lecture -> HTML
-           |
-[BLOCKED interface] return to TA review
+A: accounts/classes/lectures -> B: upload to S3
+                                      |
+                           B: Markdown + PDF images
+                                      |
+                     C: Purdue text and vision drafts
+                                      |
+                         validated JSON -> XML in S3
+                                      |
+                  C: Node + first NodeVersion -> ta_review
+                                      |
+                     D: TA review -> professor review -> E: approved HTML
+                                      |
+                         D: send-back / regenerate
+                                      |
+                 NOT WIRED: call C's revise public function
+                                      |
+                      C: validated RevisionDraft (ready)
+                                      |
+                 D TODO: completion transition + C apply_revision atomically
 ```
 
-1. **Set up the course (A).** Existing APIs manage accounts, classes and lectures.
-   `Lecture.ta_context` stores the teacher's explanation of what students should learn.
-   Only account/class routes are registered in `backend/config/urls.py` on track-c.
-2. **Upload (B using A).** Planned upload endpoints obtain a short-lived S3 upload
-   link from A's implemented helper. Completion should check the file and queue
-   `uploads.tasks.convert_source_file(source_file_id)`. Those endpoints are absent
-   here; a helper alone is not a working upload journey.
-3. **Extract (B).** The task's TODO specifies MarkItDown conversion, figure/equation
-   extraction, a ParsedDocument record, then queueing
-   `pipeline.tasks.process_document(parsed_document_id)`. The checked-out function
-   raises `NotImplementedError`, meaning it deliberately stops because it is unfinished.
-4. **Draft and create nodes (C).** Planned inputs are Markdown, assets and lecture
-   context. Structured AI JSON would be checked and converted to XML by application
-   code. C would save the XML, nodes and first versions, and log every AI call.
-   The task is still a stub. `router.py` already selects the inexpensive model for
-   images/graphs and the strong model for other kinds, using settings.
-5. **TA review (D).** The implemented `transition` helper permits approval from
-   `ta_review` to `prof_review`, editing, flagging and regeneration. A professor may
-   also perform the first review. Regeneration moves the state to `processing`;
-   it does not itself trigger an AI call. Review API endpoints are still absent.
-6. **Revision (D and C).** A professor can send a node back from `prof_review` to
-   `revising`, with a required comment. D is intended to call `pipeline.service.revise`.
-   That stub describes using the current draft, comment and lecture context to add
-   a version and return to TA review. No completion transition currently supports
-   that return; this is a D/C interface blocker.
-7. **Final approval and export (D and E).** The helper permits only a professor role
-   to move a node from `prof_review` to `approved`. Bulk approval is all-or-nothing
-   and records an action for each node. E's planned export task must refuse a lecture
-   unless all nodes are approved, render accessible HTML and save the exact version
-   IDs used. Export triggering/API and rendering remain unfinished.
+B now queues C's processing task after saving ParsedDocument. The task validates
+class-scoped input references, reads Markdown/assets, generates structured drafts,
+constructs XML and initializes review nodes. It does not overwrite existing nodes.
+E now renders current approved versions, including our content/extra shapes.
 
-### Concrete example: work and energy
+For a work-and-energy lecture, C asks the text model to preserve the explanation and
+LaTeX equation, and asks the vision model to describe the actual graph image. Each
+result is validated and stored as an initial AI version. The resolved asset_key is
+saved so E can embed the original image. Human approval remains mandatory.
 
-Imagine a PDF containing a paragraph, `W = ∫ F ds`, and a force/displacement graph.
-B would retain the PDF, extract text to Markdown and save a graph crop with its page.
-C would draft three nodes: text, equation and graph. The equation's content would
-be LaTeX, a text notation for mathematical formulas; E would later convert it to
-MathML, markup that represents mathematical structure for accessible reading.
+Revisions are deliberately staged: C prepares a draft against a specific version,
+and discards results based on a version that changed. D must wire its endpoints,
+add completion/failure state transitions, and call C's apply hook inside the same
+transaction as its completion transition. C never changes an existing Node.state.
 
-Under the current **proposal**, the graph node contains short alternative text plus
-`extra.long_description`, and references an allowlisted asset ID. “Allowlisted” means
-it must identify an asset supplied with that document, not an invented storage path.
-D's TA checks the description, then the professor asks for the area-under-the-curve
-explanation. A future C revision adds a second version rather than replacing the
-first. After another review and approval, E exports the selected version. This is
-an illustration of the intended flow, not a successful integration test.
-
-### Background work, failures and retries
-
-Settings route upload tasks to `convert`, pipeline tasks to `llm`, and export tasks
-to `export`. Docker Compose configures a worker to consume all three queues. This
-lets slow processing happen outside an API request. Queues are configured, but the
-stubs neither complete jobs nor provide a demonstrated background workflow.
-
-The database defines failed/rejected states and error fields. The contract validator
-raises `ContractError` for invalid input; it does not change job or node records.
-There is no explicit retry policy in these task stubs, no implemented guarantee
-against duplicate node creation when a task runs twice, and no complete AI failure
-or success transition. Retry delays, partial-result cleanup, cost logging on failure,
-concurrent revisions and who updates job/file status all need design agreement.
-Do not infer those behaviors from the presence of Celery or status fields.
+Claims, bounded provider retries, safe failure fields and S3/database limitations
+are documented in [RUNNING.md](RUNNING.md). The full upload-to-export path has not
+been exercised against live S3/Redis. SQLite tests and two synthetic Purdue calls
+verify narrower behavior; they are not production readiness or accessibility proof.
 
 ## 4. Engineer C working rules and approved scope
 
-- Intended working branch: **`track-c`**. Verified current branch on 2026-10-26:
+- Intended working branch: **`track-c`**. Verified current branch on 2026-11-02:
   **`track-c`**. Original baseline: `a52b3260afb09a77ce37862b572997f4d2c09309`;
-  see the commit history below for subsequent C work.
+  fast-forwarded to integration `fbf53ca0c8165c00a1f58d751d296d291e7701ef`;
+  current implementation edits are uncommitted.
 - Actual root: `/Users/Gaurav/Desktop/projects/access-path/AccessPath`. Its remote is
   `https://github.com/hankjacoby9-cpu/AccessPath.git`. The parent `access-path/` has a
   separate empty Git repository; do not confuse its history with this checkout.
@@ -261,8 +221,13 @@ Do not infer those behaviors from the presence of Celery or status fields.
 - The user approved the schema/contract increment first: JSON/XML drafts, serializer,
   validation, documentation, synthetic fixtures and focused tests, all inside
   `backend/apps/pipeline/`. Audio/video semantics must remain labeled proposals.
-- The user explicitly excluded processing, revision, persistence, state transitions,
-  real model calls, shared dependencies and other engineers' code from that increment.
+- That initial increment excluded processing and model calls. On 2026-11-02 the user
+  authorized implementation using Purdue as the selected provider and integration
+  as the baseline. When asked about D's integration changes, the user explicitly
+  chose: keep edits in pipeline and document D's remaining work. This boundary remains.
+- Provider configuration is pipeline-owned, read from Django-loaded environment
+  variables. No shared settings, requirements or review files were edited. Installing
+  integration's declared dependencies and local migrations does not change those files.
 - The original guide-creation task was documentation-only. On 2026-10-26 the user
   subsequently authorized committing today's C work and pushing only `track-c`,
   including one final documentation commit to record the implementation hash.
@@ -276,27 +241,26 @@ Do not infer those behaviors from the presence of Celery or status fields.
   supplies no persistence API. Flag that ambiguity; do not silently broaden access.
 - Flag needed out-of-scope changes before editing. Keep API keys out of Git. Tests
   should fake AI responses; real-model evaluation is separate and requires an agreed
-  scope/budget. No paid calls have been made in this work.
+  scope/budget. Two synthetic Purdue generation calls were made on 2026-11-02;
+  their cost is unreported, not assumed free. No course documents were sent.
 
 ## 5. Current status, decisions and validation
 
 ### What exists today
 
-The inherited pipeline scaffold has a model router, `LLMCall` model, initial migration
-and admin registration. `tasks.py` and `service.py` remain stubs. Existing review
-models and transition helpers are dependencies, not new C work.
+The current uncommitted implementation adds Purdue configuration/client, versioned
+prompts, input normalization/chunking, text and vision drafting, transactional initial
+node publication, durable claims, usage/failure logging and revision drafts. See
+[RUNNING.md](RUNNING.md) for public functions, commands and exact boundaries.
 
-The contract increment supplies `validate_document`, `to_xml` and
-`validate_xml` in `contract.py`. These are pure functions: they validate data and
-produce/read XML without storage, database or AI access. The schema describes all
-eight kinds. Audio/video are rejected by default and require explicit opt-in for
-exploring their proposed shapes; that is not operational media support.
+`models.py` and the pipeline-only 0002 migration add processing claims, revision drafts,
+a shared provider throttle and richer LLMCall accounting. The local SQLite migrations
+were applied. No shared Node/NodeVersion schemas changed.
 
-The XML proposal changes the original example to uniform `content` and `extra`
-fields. It is a proposed breaking format change. Full rules, field tables and
-proposed database mappings are in [schema/CONTRACT.md](schema/CONTRACT.md). The JSON
-schema has not been verified as directly usable with a provider's structured-output
-API. The validator implements only the schema features used by this checked-in draft.
+The 0.1 contract still labels cross-team semantics as proposals. The user chose to
+retain JSON plus XML and selected Purdue as the provider. Integration corrected the
+LaTeX fixture and E now supports C's table, heading and transcript fields, but exact
+ordering and review completion are not magically resolved by that merge.
 
 ### Decisions actually authorized versus open proposals
 
@@ -310,7 +274,7 @@ API. The validator implements only the schema features used by this checked-in d
 | Open with B | Page markers, crop coordinates, stable asset references and manifest ownership | Necessary to trace descriptions back to source material. |
 | Open with D | Shared-model access, AI completion/failure API, multi-document ordering and revision concurrency | Current interfaces cannot complete the intended lifecycle. |
 | Open with E | Table/heading/description semantics, media accessibility and XML adoption | Structural validity alone does not ensure accessibility. |
-| Open with user/team | Next increment authorization, SDK compatibility and any dependency changes | No authorization to implement the full pipeline yet. |
+| Approved by user | Implement C using Purdue; retain D-owned boundaries | C processing is implemented; D lifecycle remains a handoff. |
 
 Two wording conflicts deserve explicit attention. `ParsedDocument` describes XML as
 exactly what the model returned, contrary to C's JSON-to-XML requirement. Also,
@@ -318,46 +282,37 @@ CONTRACT.md says “no ... entities”; the code correctly supports ordinary esc
 characters and numeric references while rejecting DTD/custom-entity declarations.
 This guide clarifies the observed behavior without changing either reference file.
 
-### Newly verified cross-branch input availability
+### Real B input availability
 
-Earlier inspection found no real B fixtures in the working tree, which remains true.
-History inspection for this guide found them in the locally stored `origin/track-b`
-reference: `document1.md` through `document4.md`, with two original PowerPoint files
-and two original PDFs, under `backend/apps/pipeline/fixtures/`.
-
-They were added in `c672645c728f6eb03ab5ff6f83dbb1ecdc2f46d8`. Their contents and
-quality have not been evaluated here; Git reports the Markdown files as binary in
-the change summary, so inspect encoding before assuming they are ordinary UTF-8.
-They were not copied, merged or checked out. `origin/track-b` also contains later
-upload/conversion work absent from track-c. A locally stored remote reference is
-not proof of the current server state; no fetch was performed for this guide.
+The four Markdown samples and source files from B are now present following the
+fast-forward to integration. All four Markdown fixtures are BOM-marked UTF-16; slide
+samples contain slide markers/image references, while PDF text samples lack explicit
+page markers. B's live conversion writes UTF-8. C supports both encodings and does
+not fabricate missing page numbers. Full semantic evaluation of those samples is
+still pending; the live smoke used synthetic input only.
 
 ### Validation record
 
-The contract checks were rerun before committing on 2026-10-26:
+Validation rerun before publication on 2026-11-03 (live smoke remains the 2026-11-02 result):
 
-| Check | Recorded outcome | Limit |
+| Check | Outcome | Limit |
 | --- | --- | --- |
-| Standard-library unit tests | 9 tests passed, including malformed-input subcases | Synthetic data; no integration or accessibility-quality proof. |
-| Independent JSON Schema check | Schema and eight-kind fixture valid with installed `jsonschema` | `jsonschema` was not added as a project dependency. |
-| Python 3.12 syntax parsing | Passed using Python 3.14 | Not a Python 3.12 runtime test. |
-| `git diff --check` | Passed | Whitespace check, not runtime validation. |
-| Markdown links and credential-pattern review | Passed; only eight intended pipeline files identified | Pattern checks are not a guarantee against every possible secret. |
-| Full pytest/Django suite and Ruff | Not run: tools/dependencies absent in the inspected environment | Must run in the supported development environment later. |
-| PostgreSQL, S3, worker and real AI integration | Not run | No end-to-end pipeline exists yet. |
+| Pipeline tests | 49 passed, Python 3.12 | Fake provider/storage; simulated claim races rather than PostgreSQL concurrency. |
+| Full backend suite | 197 passed, 1 failed | Same pre-existing export golden mismatch; baseline before new tests was 157 passed, 1 failed. |
+| Pipeline Ruff | Passed | Whole-backend Ruff reports 8 existing errors outside pipeline. |
+| Django system check | Passed | Does not verify deployed external services. |
+| Migration drift | No changes detected after pipeline 0002 | Local SQLite migration applied; production database not touched. |
+| Live Purdue smoke | Two successful calls; validated text/image nodes and generated XML | Synthetic text and red square only, no course data or S3. |
+| Usage evidence | Text: 401 input / 675 output tokens; vision: 580 input / 146 output | Cost remains null because no verified rate is supplied. |
 
-For the contract-only tests, run from the actual repository root:
+The default models used were `gpt-oss:120b` and `gemma4:26b-a4b`. Purdue inventory
+reported 33 available models. The key was not printed or committed. The inherited
+README's Anthropic instructions are stale relative to the team's provider decision.
 
-```sh
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend python3 -m unittest discover -s backend/apps/pipeline/tests -v
-```
-
-`backend/README.md` documents Python 3.12 setup and broader Ruff, pytest, migration
-and OpenAPI checks. Do not run setup/seed commands blindly: setup creates files and
-the seed command deletes/recreates its demo class. The README claims CI exists,
-but the inspected `.github/` contains CODEOWNERS and no workflow. Treat CI coverage
-as unverified rather than promising it. These test outcomes belong to the previous
-increment, not to the historical scaffold commits below.
+Runtime setup now includes Python 3.12, integration requirements and system libmagic.
+Full CI coverage remains unverified: the inspected repository has no workflow file.
+The pre-existing golden failure is documented in INTEGRATION_NOTES.md and was not
+silenced or repaired by changing another engineer's fixture.
 
 ## 6. Commit history and uncommitted work
 
@@ -466,51 +421,59 @@ passed as recorded above; no full backend, paid AI or accessibility evaluation w
 run. B/D/E contract approval and lifecycle interfaces remain blockers. Next: review
 B's existing samples, confirm the proposed handoffs, and agree the next increment.
 
-### Remaining local work and publication
+### Uncommitted work: 2026-11-02 Purdue implementation
 
-The only follow-up edit after the implementation commit is this commit-log update,
-intended for the user-authorized final documentation commit. No unrelated changes
-were left out of the implementation commit because none were present. No new
-features or tests changed in this follow-up. Publication targets only
-`origin` branch `track-c`, with upstream tracking; verify its final hash using
-`git ls-remote origin refs/heads/track-c` after pushing. Push success is verified by
-the execution report rather than asserted before the network operation completes.
+Practical effect: B's existing processing entry point now generates drafts and creates
+reviewable nodes, instead of raising NotImplementedError. C also prepares and can
+apply version-safe revision drafts through an explicit D integration contract.
+
+New/changed pipeline areas: configuration.py, router.py, client.py, prompts.py,
+drafting.py, processing.py, tasks.py, service.py, models.py, migration 0002, admin.py,
+management commands, client/processing tests, RUNNING.md and this guide. No new
+commit exists for this increment. Earlier `dafe1ff` and `b6472c7` remain the actual
+committed C deliveries. The fast-forward brought in 37 existing integration commits;
+those are not new work authored in this increment.
+
+All implementation changes remain inside pipeline. The user separately approved the
+shared `backend/.env.example` update on 2026-11-03: Purdue variables with an empty
+key and legacy Anthropic labels. The private `.env` was not changed by that edit. Local ignored `.venv`/SQLite state
+was updated for dependencies, migrations and synthetic call logs. The API key remains
+in ignored `.env`. Validation and limits are recorded above. Initial state is
+`ta_review`; existing review states are never written by C. Reading-order fallback,
+limits, retry behavior, draft-application prerequisites and S3 orphan possibilities
+are documented in RUNNING.md as implementation choices, not implied team consensus.
+
+### Publication review: 2026-11-03
+
+The user authorized committing all pending C implementation/documentation and the
+approved `.env.example` change, then pushing only track-c. Existing author identity:
+`gaurav <gaurav14rsm@gmail.com>`. New commits have no AI attribution or co-author trailers.
+Private `.env`, `.venv` and SQLite data remain ignored and untracked. Compared pending
+files and 108 outgoing historical blobs against local credential values and selected
+secret patterns; no matches were found. This is a targeted check, not a complete
+application security audit. Existing integration history is preserved unchanged.
+
+Pipeline tests, Ruff, Django system/migration checks passed. The known C/E export
+golden mismatch remains the only full-suite failure. D endpoint/state integration,
+real S3/Redis validation and PostgreSQL concurrency remain outstanding. No new live
+model calls were needed for this publication review.
 
 ## 7. Prioritized next steps and handoff
 
-Labels describe status, not permission to execute future work automatically.
-
-- [x] **Completed:** Establish the correct repository and create track-c. The nested
-  checkout has real history; current branch and commit are recorded above.
-- [x] **Completed draft:** Build contract shapes, validator, serializer, synthetic
-  examples and focused tests. Complete as a local proposal, not a team-approved format.
-- [x] **Completed documentation:** Create this continuity guide and audit available
-  history without committing or changing other files.
-- [ ] **In progress — contract review:** Resolve the open field/format decisions in
-  CONTRACT.md with B/D/E. Complete when each accepted decision has a recorded source
-  and unresolved fields remain clearly labeled; approval to draft is not approval
-  of every proposed field.
-- [ ] **Pending, first actionable follow-up:** Read B's existing fixture blobs on
-  `origin/track-b` without changing branches. Check encoding, page/asset information
-  and representability in the draft. Complete with a small evidence-backed mismatch
-  list; importing samples or changing the contract requires a scoped follow-up.
-- [ ] **Pending — development validation:** Establish the documented Python 3.12
-  environment, then run Ruff, contract tests and applicable backend checks. Coordinate
-  setup/dependency changes outside C's folder. Complete when results and limitations
-  are recorded, not simply when dependencies install.
-- [ ] **Blocked for integration — D lifecycle:** Agree on public completion/failure
-  transitions and ownership of authorization/status updates. Complete when the
-  responsible engineer supplies an agreed interface; do not bypass state rules.
-- [ ] **Pending approval — model adapter and prompts:** After contract review, propose
-  a narrow increment using fake model responses and versioned prompts. Depend on a
-  tested SDK/schema approach and real input samples. Complete with deterministic tests
-  for valid outputs, refusal, truncation and errors, without paid calls by default.
-- [ ] **Later — processing, persistence and revision:** Agree on repeated-job safety,
-  version numbering, concurrent edits, cost accounting and S3/database failure handling.
-  Complete only when tests verify those behaviors against the agreed interfaces.
-- [ ] **Later — evaluation and export handoff:** With B's real samples and E's rubric,
-  assess meaning and accessibility, not just document shape. Real calls need an agreed
-  budget; accessible media requires its own design.
+- [x] Fast-forward track-c to the integration baseline while preserving the local key.
+- [x] Confirm Purdue access and validate text/image structured outputs with synthetic inputs.
+- [x] Implement initial processing, XML storage, asset-key mapping and node/version publication.
+- [x] Implement bounded provider retries, call accounting and durable document claims.
+- [x] Implement authenticated revision requests, ready drafts and guarded application hook.
+- [x] Add focused mocked tests and reproduce the known integration test baseline.
+- [ ] **D dependency:** wire send-back/regenerate to C; add completion/failure transitions;
+  atomically complete state and call apply_revision. See RUNNING.md for exact steps.
+- [ ] **C/E decision:** reconcile the eight-node XML and four-node golden HTML fixtures.
+- [ ] **B dependency:** richer page/asset ordering and extraction, plus upload ownership checks.
+- [ ] **Pending validation:** PostgreSQL concurrency, real S3/Redis processing and representative
+  accessibility evaluation. Synthetic success does not complete these checks.
+- [ ] Review the uncommitted diff and commit/push when requested; no publication was performed
+  for this implementation increment.
 
 ## 8. Maintaining this guide
 
@@ -532,13 +495,10 @@ Read-only reviews can update this guide only when the user's task permits editin
 
 ## Start here next session
 
-1. Read `backend/docs/engineer-c.md`, applicable instructions, this guide and
-   [schema/CONTRACT.md](schema/CONTRACT.md). Inspect `contract.py` and its tests.
-2. Verify the nested Git root, current branch, `git status`, HEAD and available remote
-   references. Preserve any local changes. Do not infer a
-   clean checkout or updated remote state from this dated snapshot.
-3. Next actionable task: review the four B fixtures already available in local
-   `origin/track-b` and report contract mismatches without merging or switching branches.
-4. Decisions needed from the user/team: who confirms B/D/E handoffs, whether to adopt
-   the proposed breaking XML shape, how to incorporate B's samples, and authorization
-   for the next implementation increment. Full pipeline implementation remains deferred.
+1. Read the official C brief, applicable instructions, this guide and [RUNNING.md](RUNNING.md).
+   The shared brief still mentions Anthropic; the user's Purdue decision supersedes that provider choice.
+2. Verify track-c, HEAD and git status. Preserve the current uncommitted pipeline implementation.
+3. Run `pytest apps/pipeline/tests -q` and inspect the D handoff before adding more integration.
+4. Coordinate D's completion API and the C/E fixture decision. Do not edit either lane without
+   authorization. The next meaningful validation is a representative S3/Redis document run and
+   PostgreSQL concurrency test, not another synthetic API call.

@@ -1,16 +1,20 @@
-"""Lane C. Celery tasks on the llm queue."""
+"""Lane C tasks on the existing llm queue. Provider retries are bounded in client.py."""
 
 from celery import shared_task
 
+from .models import ProcessingRun, RevisionDraft
+from .processing import prepare_revision, process
 
-@shared_task
-def process_document(parsed_document_id: str) -> None:
-    """
-    TODO (Engineer C):
-    1. Build the prompt (fixed system prompt + lecture ta_context + Markdown chunk).
-    2. Call the strong model with structured output, then build node XML from the result.
-    3. Validate the XML against pipeline/schema, save it to S3.
-    4. Create one Node and its first NodeVersion per node. Send images and graphs to the cheap model.
-    5. Log every call in LLMCall.
-    """
-    raise NotImplementedError
+
+@shared_task(bind=True, acks_late=True, reject_on_worker_lost=True)
+def process_document(self, parsed_document_id: str) -> None:
+    process(parsed_document_id)
+    if ProcessingRun.objects.filter(document_id=parsed_document_id, status="running").exists():
+        raise self.retry(countdown=60, max_retries=None)
+
+
+@shared_task(bind=True, acks_late=True, reject_on_worker_lost=True)
+def revise_node(self, revision_id: str) -> None:
+    prepare_revision(revision_id)
+    if RevisionDraft.objects.filter(pk=revision_id, status="running").exists():
+        raise self.retry(countdown=60, max_retries=None)
