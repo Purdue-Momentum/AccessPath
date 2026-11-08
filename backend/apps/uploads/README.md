@@ -25,6 +25,8 @@
 - Figure out what authentication looks like
 - Complete sample upload
 - Ensure that the lecture belongs to the class
+- Observe https://python-pptx.readthedocs.io/en/latest/api/enum/MsoShapeType.html?highlight=mso_shape_type and handle additional types for powerpoints
+- Handle transformation within groups for powerpoints
 ## Notes
 - Name is passed in to urlpatterns to ensure that reverse can be used in unit test independently of path
 - Pages will be 1-indexed

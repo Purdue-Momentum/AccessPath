@@ -8,6 +8,7 @@ from django.db import transaction
 from celery import shared_task
 from markitdown import MarkItDown, StreamInfo
 import pymupdf
+import pptx
 
 from apps.storage.s3 import get_bytes, class_key, put_bytes
 from .models import SourceFile, ProcessingJob, ParsedDocument
@@ -93,7 +94,51 @@ def extract_source_file(source_file_id: str) -> None:
 
     assets = []
 
-    if source_file.extension.lower() == ".pdf":
+    if source_file.extension.lower() == ".pptx":
+        
+        prs = pptx.Presentation(stream)
+
+        page_number = 1
+
+        def parse(shapes):
+            for shape in shapes:
+                if shape.shape_type == pptx.enum.shapes.MSO_SHAPE_TYPE.GROUP:
+                    parse(shape.shapes)
+                elif shape.shape_type == pptx.enum.shapes.MSO_SHAPE_TYPE.PICTURE:
+                    image_bytes = shape.image.blob
+                
+                    # Doesn't include the '.', e.g. 'jpeg'
+                    image_extension = shape.image.content_type
+
+                    xref = len(assets) + 1
+
+                    image_uuid = uuid.uuid4()
+                    image_s3_key = class_key(
+                        source_file.klass_id,
+                        "assets",
+                        image_uuid,
+                        f"image_p{page_number}-{xref}.{image_extension}"
+                    )
+
+                    put_bytes(image_s3_key, image_bytes, content_type=f"image/{image_extension}")
+
+                    assets.append({
+                        "key": image_s3_key,
+                        "kind": "image",
+                        "page": page_number,
+                        "box": [
+                            shape.left / pptx.util.Pt(1),
+                            shape.top / pptx.util.Pt(1),
+                            (shape.left + shape.width) / pptx.util.Pt(1),
+                            (shape.top + shape.height) / pptx.util.Pt(1),
+                        ]
+                    })
+    
+        for slide in prs.slides:
+            parse(slide.shapes)
+            page_number += 1
+
+    elif source_file.extension.lower() == ".pdf":
         doc = pymupdf.open(stream=file_bytes, filetype="pdf")
         for page in doc:
             for image_info in page.get_images():
