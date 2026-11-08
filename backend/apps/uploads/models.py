@@ -63,6 +63,6 @@ class ParsedDocument(BaseModel):
     """
 
     source_file = models.OneToOneField(SourceFile, on_delete=models.CASCADE, related_name="parsed")
-    markdown_s3_key = models.CharField(max_length=500)
+    markdown_s3_key = models.CharField(max_length=500, blank=True)
     assets = models.JSONField(default=list, blank=True)
     xml_s3_key = models.CharField(max_length=500, blank=True)

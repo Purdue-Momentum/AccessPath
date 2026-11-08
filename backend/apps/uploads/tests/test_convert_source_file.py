@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from apps.classes.models import Class, Lecture
 from apps.uploads.models import SourceFile, ProcessingJob, ParsedDocument
-from apps.uploads.tasks import convert_source_file
+from apps.uploads.tasks import convert_source_file, extract_source_file
 
 @pytest.mark.django_db
 @patch("apps.uploads.tasks.put_bytes")
@@ -40,13 +40,22 @@ def test_upload_files_success(
     status=SourceFile.Status.UPLOADED
   )
 
-  processing_job = ProcessingJob.objects.create(
+  ProcessingJob.objects.create(
     source_file=source_file,
     stage=ProcessingJob.Stage.CONVERT,
     status=ProcessingJob.Status.QUEUED
   )
+  ProcessingJob.objects.create(
+    source_file=source_file,
+    stage=ProcessingJob.Stage.EXTRACT,
+    status=ProcessingJob.Status.QUEUED
+  )
+  ParsedDocument.objects.create(
+    source_file=source_file
+  )
 
   convert_source_file(source_file.id)
+  extract_source_file(source_file.id)
 
   source_file.refresh_from_db()
   assert source_file.status == SourceFile.Status.PROCESSING

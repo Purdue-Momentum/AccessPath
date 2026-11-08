@@ -3,6 +3,8 @@ import os
 import hashlib
 import magic
 
+from celery import chord
+
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 
@@ -12,8 +14,9 @@ from rest_framework.response import Response
 
 from apps.storage.s3 import class_key, put_bytes
 from apps.classes.models import Class, Lecture
-from .models import SourceFile, ProcessingJob
-from .tasks import convert_source_file
+from .models import SourceFile, ProcessingJob, ParsedDocument
+from .tasks import convert_source_file, extract_source_file
+from apps.pipeline.tasks import process_document
 
 class UploadFiles(APIView):
     def post(self, request, class_id):
@@ -74,16 +77,31 @@ class UploadFiles(APIView):
                 "s3_key": source_file.s3_key
             })
 
-            processing_job = ProcessingJob(
+            convert_processing_job = ProcessingJob.objects.create(
                 source_file=source_file,
                 stage=ProcessingJob.Stage.CONVERT,
                 status=ProcessingJob.Status.QUEUED
             )
-            processing_job.save()
+
+            extract_processing_job = ProcessingJob.objects.create(
+                source_file=source_file,
+                stage=ProcessingJob.Stage.EXTRACT,
+                status=ProcessingJob.Status.QUEUED
+            )
+
+            parsed_document = ParsedDocument.objects.create(
+                source_file=source_file
+            )
 
             # Parameter necessary because source_file.id
             # will be passed by reference and python
             # doesn't have block scoping for for loops
-            transaction.on_commit(lambda sf_id=source_file.id: convert_source_file.delay(sf_id))
+            def dispatch(sf_id=source_file.id, pd_id=parsed_document.id):
+                chord([
+                    convert_source_file.s(sf_id),
+                    extract_source_file.s(sf_id)
+                ])(process_document.si(pd_id))
+
+            transaction.on_commit(dispatch)
         
         return Response({"results": results}, status=status.HTTP_201_CREATED)

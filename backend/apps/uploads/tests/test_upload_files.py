@@ -9,8 +9,18 @@ from apps.classes.models import Class, Lecture
 from apps.uploads.models import SourceFile
 
 @pytest.mark.django_db
+@patch("apps.pipeline.tasks.process_document")
+@patch("apps.uploads.tasks.extract_source_file")
+@patch("apps.uploads.tasks.convert_source_file")
 @patch("apps.uploads.views.put_bytes")
-def test_upload_files_success(mock_put_bytes, client, make_user):
+def test_upload_files_success(
+    mock_put_bytes,
+    mock_convert_source_file,
+    mock_extract_source_file,
+    mock_process_document,
+    client,
+    make_user):
+
   user = make_user()
   client.force_login(user=user)
 
