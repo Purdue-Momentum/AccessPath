@@ -100,15 +100,51 @@ def extract_source_file(source_file_id: str) -> None:
 
         page_number = 1
 
-        def parse(shapes):
+        # parent is the previous transformation
+        # group is the current group
+        # Resource: https://stackoverflow.com/a/60776997
+        def transform(group, parent):
+            el = group._element
+
+            # XML elements' attributes are stored as strings
+            # Attempts to find XML attributes in an element
+            def find(tag, a, b):
+                found = el.xpath(f"./p:grpSpPr/a:xfrm/a:{tag}")
+                if not found:
+                    return None
+                try:
+                    return int(found[0].get(a)), int(found[0].get(b))
+                except (TypeError, ValueError):
+                    return None
+
+            # Offset and extent of group in parent
+            off = find("off", "x", "y")
+            ext = find("ext", "cx", "cy")
+            # Offset and extent of group's children coordinates
+            ch_off = find("chOff", "x", "y")
+            ch_ext = find("chExt", "cx", "cy")
+
+            if None in (off, ext, ch_off, ch_ext):
+                return parent
+
+            # Scale
+            gsx = ext[0] / ch_ext[0] if ch_ext[0] else 1.0
+            gsy = ext[1] / ch_ext[1] if ch_ext[1] else 1.0
+
+            # Transform
+            gtx = off[0] - ch_off[0] * gsx
+            gty = off[1] - ch_off[1] * gsy
+
+            psx, psy, ptx, pty = parent
+            return (psx * gsx, psy * gsy, psx * gtx + ptx, psy * gty + pty)
+
+        # transformation = (scale_x, scale_y, offset_x, offset_y)
+        def parse(shapes, transformation=(1.0, 1.0, 0.0, 0.0)):
             for shape in shapes:
                 if shape.shape_type == pptx.enum.shapes.MSO_SHAPE_TYPE.GROUP:
-                    parse(shape.shapes)
+                    parse(shape.shapes, transform(shape, transformation))
                 elif shape.shape_type == pptx.enum.shapes.MSO_SHAPE_TYPE.PICTURE:
                     image_bytes = shape.image.blob
-                
-                    # Doesn't include the '.', e.g. 'jpeg'
-                    image_extension = shape.image.content_type
 
                     xref = len(assets) + 1
 
@@ -117,20 +153,21 @@ def extract_source_file(source_file_id: str) -> None:
                         source_file.klass_id,
                         "assets",
                         image_uuid,
-                        f"image_p{page_number}-{xref}.{image_extension}"
+                        f"image_p{page_number}-{xref}.{shape.image.ext}"
                     )
 
-                    put_bytes(image_s3_key, image_bytes, content_type=f"image/{image_extension}")
+                    put_bytes(image_s3_key, image_bytes, content_type=f"image/{shape.image.content_type}")
 
+                    sx, sy, tx, ty = transformation
                     assets.append({
                         "key": image_s3_key,
                         "kind": "image",
                         "page": page_number,
                         "box": [
-                            shape.left / pptx.util.Pt(1),
-                            shape.top / pptx.util.Pt(1),
-                            (shape.left + shape.width) / pptx.util.Pt(1),
-                            (shape.top + shape.height) / pptx.util.Pt(1),
+                            (shape.left * sx + tx) / pptx.util.Pt(1),
+                            (shape.top * sy + ty) / pptx.util.Pt(1),
+                            ((shape.left + shape.width) * sx + tx) / pptx.util.Pt(1),
+                            ((shape.top + shape.height) * sy + ty) / pptx.util.Pt(1)
                         ]
                     })
     
