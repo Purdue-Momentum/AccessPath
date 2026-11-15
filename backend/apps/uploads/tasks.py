@@ -2,13 +2,19 @@ import io
 import uuid
 import os
 
+import math
+import numpy as np
+
 from django.utils import timezone
 from django.db import transaction
 
 from celery import shared_task
 from markitdown import MarkItDown, StreamInfo
 import pymupdf
+
 import pptx
+from pptx.util import Pt
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 from apps.storage.s3 import get_bytes, class_key, put_bytes
 from .models import SourceFile, ProcessingJob, ParsedDocument
@@ -100,16 +106,39 @@ def extract_source_file(source_file_id: str) -> None:
 
         page_number = 1
 
+        def translate(tx, ty):
+            return np.array([[1, 0, tx],
+                             [0, 1, ty],
+                             [0, 0, 1 ]], dtype=float)
+
+        def scale(sx, sy):
+            return np.array([[sx,  0, 0],
+                             [ 0, sy, 0],
+                             [ 0,  0, 1]], dtype=float)
+        
+        def rotate(deg):
+            t = math.radians(deg)
+            c, s = math.cos(t), math.sin(t)
+            return np.array([[c, -s, 0],
+                             [s,  c, 0],
+                             [0,  0, 1]], dtype=float)
+
         # parent is the previous transformation
         # group is the current group
         # Resource: https://stackoverflow.com/a/60776997
         def transform(group, parent):
-            el = group._element
+
+            xfrm = group._element.xpath("./p:grpSpPr/a:xfrm")
+
+            if not xfrm:
+                return parent
+
+            xfrm = xfrm[0]
 
             # XML elements' attributes are stored as strings
             # Attempts to find XML attributes in an element
             def find(tag, a, b):
-                found = el.xpath(f"./p:grpSpPr/a:xfrm/a:{tag}")
+                found = xfrm.xpath(f"./a:{tag}")
                 if not found:
                     return None
                 try:
@@ -127,23 +156,45 @@ def extract_source_file(source_file_id: str) -> None:
             if None in (off, ext, ch_off, ch_ext):
                 return parent
 
+            # Rotation
+            try:
+                rot = int(xfrm.get("rot", "0")) / 60000
+            except ValueError:
+                rot = 0.0
+            
+            # Flip
+            fh = xfrm.get("flipH") in ("1", "true")
+            fv = xfrm.get("flipV") in ("1", "true")
+
             # Scale
-            gsx = ext[0] / ch_ext[0] if ch_ext[0] else 1.0
-            gsy = ext[1] / ch_ext[1] if ch_ext[1] else 1.0
+            sx = ext[0] / ch_ext[0] if ch_ext[0] else 1.0
+            sy = ext[1] / ch_ext[1] if ch_ext[1] else 1.0
 
-            # Transform
-            gtx = off[0] - ch_off[0] * gsx
-            gty = off[1] - ch_off[1] * gsy
+            m = np.eye(3)
 
-            psx, psy, ptx, pty = parent
-            return (psx * gsx, psy * gsy, psx * gtx + ptx, psy * gty + pty)
+            # Stretch
+            m = np.matmul(translate(-ch_off[0], -ch_off[1]), m)
+            m = np.matmul(scale(sx, sy), m)
 
-        # transformation = (scale_x, scale_y, offset_x, offset_y)
-        def parse(shapes, transformation=(1.0, 1.0, 0.0, 0.0)):
+            cx = ext[0] / 2
+            cy = ext[1] / 2
+
+            # Flip and rotate
+            m = np.matmul(translate(-cx, -cy), m)
+            m = np.matmul(scale(-1 if fh else 1, -1 if fv else 1), m)
+            m = np.matmul(rotate(rot), m)
+            m = np.matmul(translate(cx, cy), m)
+
+            # Translate
+            m = np.matmul(translate(off[0], off[1]), m)
+
+            return np.matmul(parent, m)
+
+        def parse(shapes, transformation=np.eye(3)):
             for shape in shapes:
-                if shape.shape_type == pptx.enum.shapes.MSO_SHAPE_TYPE.GROUP:
+                if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
                     parse(shape.shapes, transform(shape, transformation))
-                elif shape.shape_type == pptx.enum.shapes.MSO_SHAPE_TYPE.PICTURE:
+                elif shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
                     image_bytes = shape.image.blob
 
                     xref = len(assets) + 1
@@ -156,18 +207,46 @@ def extract_source_file(source_file_id: str) -> None:
                         f"image_p{page_number}-{xref}.{shape.image.ext}"
                     )
 
-                    put_bytes(image_s3_key, image_bytes, content_type=f"image/{shape.image.content_type}")
+                    put_bytes(image_s3_key, image_bytes, content_type=shape.image.content_type)
 
-                    sx, sy, tx, ty = transformation
+                    left = shape.left
+                    right = left + shape.width
+                    top = shape.top
+                    bottom = top + shape.height
+
+                    points = np.array([[left, right,  right,   left],
+                                       [ top,   top, bottom, bottom],
+                                       [   1,     1,      1,      1]], dtype=float)
+
+                    cx = (left + right) / 2
+                    cy = (top + bottom) / 2
+
+                    m = np.eye(3)
+
+                    # Rotate by picture's own rotation
+                    m = np.matmul(translate(-cx, -cy), m)
+                    m = np.matmul(rotate(shape.rotation), m)
+                    m = np.matmul(translate(cx, cy), m)
+                    
+                    # Compose with parent transformation
+                    m = np.matmul(transformation, m)
+                    
+                    points = np.matmul(m, points)
+                    # Rectangle configuration doesn't really support rotations
+                    # so we just take the topmost, leftmost, bottommost, and
+                    # rightmost x and y coordinates
+                    xs = points[0]
+                    ys = points[1]
+
                     assets.append({
                         "key": image_s3_key,
                         "kind": "image",
                         "page": page_number,
                         "box": [
-                            (shape.left * sx + tx) / pptx.util.Pt(1),
-                            (shape.top * sy + ty) / pptx.util.Pt(1),
-                            ((shape.left + shape.width) * sx + tx) / pptx.util.Pt(1),
-                            ((shape.top + shape.height) * sy + ty) / pptx.util.Pt(1)
+                            float(xs.min() / Pt(1)),
+                            float(ys.min() / Pt(1)),
+                            float(xs.max() / Pt(1)),
+                            float(ys.max() / Pt(1)),
                         ]
                     })
     

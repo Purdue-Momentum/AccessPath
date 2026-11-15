@@ -27,3 +27,4 @@ python-magic==0.4.27
 latex2mathml==3.81.1
 markdown-it-py==4.2.0
 mdit_py_plugins==0.6.1
+numpy==2.5.0
