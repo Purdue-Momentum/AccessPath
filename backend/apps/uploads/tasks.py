@@ -297,7 +297,21 @@ def extract_source_file(source_file_id: str) -> None:
 
     assets = []
 
-    if source_file.extension.lower() == ".pptx":
+    if source_file.extension.lower() in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
+
+        pix = pymupdf.Pixmap(stream)
+
+        width_pt = pix.width / pix.xres * 72
+        height_pt = pix.height / pix.yres * 72
+
+        assets = [{
+            "key": source_file.s3_key,
+            "kind": "image",
+            "page": 1,
+            "box": [0.0, 0.0, width_pt, height_pt]
+        }]
+
+    elif source_file.extension.lower() == ".pptx":
         assets = parse_pptx(stream=stream, source_file=source_file)
 
     elif source_file.extension.lower() == ".pdf":
