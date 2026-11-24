@@ -12,6 +12,11 @@ from celery import shared_task
 from markitdown import MarkItDown, StreamInfo
 import pymupdf
 
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+
 import pptx
 from pptx.util import Pt
 from pptx.enum.shapes import MSO_SHAPE_TYPE
@@ -72,6 +77,198 @@ def convert_source_file(source_file_id: str) -> None:
         markdown_s3_key=markdown_s3_key
     )
 
+def parse_pptx(stream, source_file):
+    assets = []
+
+    prs = pptx.Presentation(stream)
+
+    page_number = 1
+
+    def translate(tx, ty):
+        return np.array([[1, 0, tx],
+                            [0, 1, ty],
+                            [0, 0, 1 ]], dtype=float)
+
+    def scale(sx, sy):
+        return np.array([[sx,  0, 0],
+                            [ 0, sy, 0],
+                            [ 0,  0, 1]], dtype=float)
+    
+    def rotate(deg):
+        t = math.radians(deg)
+        c, s = math.cos(t), math.sin(t)
+        return np.array([[c, -s, 0],
+                            [s,  c, 0],
+                            [0,  0, 1]], dtype=float)
+
+    # parent is the previous transformation
+    # group is the current group
+    # Resource: https://stackoverflow.com/a/60776997
+    def transform(group, parent):
+
+        xfrm = group._element.xpath("./p:grpSpPr/a:xfrm")
+
+        if not xfrm:
+            return parent
+
+        xfrm = xfrm[0]
+
+        # XML elements' attributes are stored as strings
+        # Attempts to find XML attributes in an element
+        def find(tag, a, b):
+            found = xfrm.xpath(f"./a:{tag}")
+            if not found:
+                return None
+            try:
+                return int(found[0].get(a)), int(found[0].get(b))
+            except (TypeError, ValueError):
+                return None
+
+        # Offset and extent of group in parent
+        off = find("off", "x", "y")
+        ext = find("ext", "cx", "cy")
+        # Offset and extent of group's children coordinates
+        ch_off = find("chOff", "x", "y")
+        ch_ext = find("chExt", "cx", "cy")
+
+        if None in (off, ext, ch_off, ch_ext):
+            return parent
+
+        # Rotation
+        try:
+            rot = int(xfrm.get("rot", "0")) / 60000
+        except ValueError:
+            rot = 0.0
+        
+        # Flip
+        fh = xfrm.get("flipH") in ("1", "true")
+        fv = xfrm.get("flipV") in ("1", "true")
+
+        # Scale
+        sx = ext[0] / ch_ext[0] if ch_ext[0] else 1.0
+        sy = ext[1] / ch_ext[1] if ch_ext[1] else 1.0
+
+        m = np.eye(3)
+
+        # Stretch
+        m = np.matmul(translate(-ch_off[0], -ch_off[1]), m)
+        m = np.matmul(scale(sx, sy), m)
+
+        cx = ext[0] / 2
+        cy = ext[1] / 2
+
+        # Flip and rotate
+        m = np.matmul(translate(-cx, -cy), m)
+        m = np.matmul(scale(-1 if fh else 1, -1 if fv else 1), m)
+        m = np.matmul(rotate(rot), m)
+        m = np.matmul(translate(cx, cy), m)
+
+        # Translate
+        m = np.matmul(translate(off[0], off[1]), m)
+
+        return np.matmul(parent, m)
+
+    def parse(shapes, transformation=np.eye(3)):
+        for shape in shapes:
+            if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+                parse(shape.shapes, transform(shape, transformation))
+            elif shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                image_bytes = shape.image.blob
+
+                xref = len(assets) + 1
+
+                image_uuid = uuid.uuid4()
+                image_s3_key = class_key(
+                    source_file.klass_id,
+                    "assets",
+                    image_uuid,
+                    f"image_p{page_number}-{xref}.{shape.image.ext}"
+                )
+
+                put_bytes(image_s3_key, image_bytes, content_type=shape.image.content_type)
+
+                left = shape.left
+                right = left + shape.width
+                top = shape.top
+                bottom = top + shape.height
+
+                points = np.array([[left, right,  right,   left],
+                                    [ top,   top, bottom, bottom],
+                                    [   1,     1,      1,      1]], dtype=float)
+
+                cx = (left + right) / 2
+                cy = (top + bottom) / 2
+
+                m = np.eye(3)
+
+                # Rotate by picture's own rotation
+                m = np.matmul(translate(-cx, -cy), m)
+                m = np.matmul(rotate(shape.rotation), m)
+                m = np.matmul(translate(cx, cy), m)
+                
+                # Compose with parent transformation
+                m = np.matmul(transformation, m)
+                
+                points = np.matmul(m, points)
+                # Rectangle configuration doesn't really support rotations
+                # so we just take the topmost, leftmost, bottommost, and
+                # rightmost x and y coordinates
+                xs = points[0]
+                ys = points[1]
+
+                assets.append({
+                    "key": image_s3_key,
+                    "kind": "image",
+                    "page": page_number,
+                    "box": [
+                        float(xs.min() / Pt(1)),
+                        float(ys.min() / Pt(1)),
+                        float(xs.max() / Pt(1)),
+                        float(ys.max() / Pt(1)),
+                    ]
+                })
+
+    for slide in prs.slides:
+        parse(slide.shapes)
+        page_number += 1
+
+    return assets
+
+def parse_pdf(stream, source_file):
+    assets = []
+
+    doc = pymupdf.open(stream=stream, filetype="pdf")
+    for page in doc:
+        for image_info in page.get_images():
+            xref = image_info[0]
+            image = doc.extract_image(xref)
+            image_bytes = image["image"]
+            
+            # Doesn't include the '.', e.g. 'jpeg'
+            image_extension = image["ext"]
+
+            image_uuid = uuid.uuid4()
+            image_s3_key = class_key(
+                source_file.klass_id,
+                "assets",
+                image_uuid,
+                f"image_p{page.number + 1}-{xref}.{image_extension}"
+            )
+
+            put_bytes(image_s3_key, image_bytes, content_type=f"image/{image_extension}")
+
+            rects = page.get_image_rects(xref)
+
+            for rect in rects:
+                assets.append({
+                    "key": image_s3_key,
+                    "kind": "image",
+                    "page": page.number + 1,
+                    "box": list(rect)
+                })
+    
+    return assets
+
 @shared_task
 def extract_source_file(source_file_id: str) -> None:
     
@@ -101,189 +298,28 @@ def extract_source_file(source_file_id: str) -> None:
     assets = []
 
     if source_file.extension.lower() == ".pptx":
-        
-        prs = pptx.Presentation(stream)
-
-        page_number = 1
-
-        def translate(tx, ty):
-            return np.array([[1, 0, tx],
-                             [0, 1, ty],
-                             [0, 0, 1 ]], dtype=float)
-
-        def scale(sx, sy):
-            return np.array([[sx,  0, 0],
-                             [ 0, sy, 0],
-                             [ 0,  0, 1]], dtype=float)
-        
-        def rotate(deg):
-            t = math.radians(deg)
-            c, s = math.cos(t), math.sin(t)
-            return np.array([[c, -s, 0],
-                             [s,  c, 0],
-                             [0,  0, 1]], dtype=float)
-
-        # parent is the previous transformation
-        # group is the current group
-        # Resource: https://stackoverflow.com/a/60776997
-        def transform(group, parent):
-
-            xfrm = group._element.xpath("./p:grpSpPr/a:xfrm")
-
-            if not xfrm:
-                return parent
-
-            xfrm = xfrm[0]
-
-            # XML elements' attributes are stored as strings
-            # Attempts to find XML attributes in an element
-            def find(tag, a, b):
-                found = xfrm.xpath(f"./a:{tag}")
-                if not found:
-                    return None
-                try:
-                    return int(found[0].get(a)), int(found[0].get(b))
-                except (TypeError, ValueError):
-                    return None
-
-            # Offset and extent of group in parent
-            off = find("off", "x", "y")
-            ext = find("ext", "cx", "cy")
-            # Offset and extent of group's children coordinates
-            ch_off = find("chOff", "x", "y")
-            ch_ext = find("chExt", "cx", "cy")
-
-            if None in (off, ext, ch_off, ch_ext):
-                return parent
-
-            # Rotation
-            try:
-                rot = int(xfrm.get("rot", "0")) / 60000
-            except ValueError:
-                rot = 0.0
-            
-            # Flip
-            fh = xfrm.get("flipH") in ("1", "true")
-            fv = xfrm.get("flipV") in ("1", "true")
-
-            # Scale
-            sx = ext[0] / ch_ext[0] if ch_ext[0] else 1.0
-            sy = ext[1] / ch_ext[1] if ch_ext[1] else 1.0
-
-            m = np.eye(3)
-
-            # Stretch
-            m = np.matmul(translate(-ch_off[0], -ch_off[1]), m)
-            m = np.matmul(scale(sx, sy), m)
-
-            cx = ext[0] / 2
-            cy = ext[1] / 2
-
-            # Flip and rotate
-            m = np.matmul(translate(-cx, -cy), m)
-            m = np.matmul(scale(-1 if fh else 1, -1 if fv else 1), m)
-            m = np.matmul(rotate(rot), m)
-            m = np.matmul(translate(cx, cy), m)
-
-            # Translate
-            m = np.matmul(translate(off[0], off[1]), m)
-
-            return np.matmul(parent, m)
-
-        def parse(shapes, transformation=np.eye(3)):
-            for shape in shapes:
-                if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
-                    parse(shape.shapes, transform(shape, transformation))
-                elif shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
-                    image_bytes = shape.image.blob
-
-                    xref = len(assets) + 1
-
-                    image_uuid = uuid.uuid4()
-                    image_s3_key = class_key(
-                        source_file.klass_id,
-                        "assets",
-                        image_uuid,
-                        f"image_p{page_number}-{xref}.{shape.image.ext}"
-                    )
-
-                    put_bytes(image_s3_key, image_bytes, content_type=shape.image.content_type)
-
-                    left = shape.left
-                    right = left + shape.width
-                    top = shape.top
-                    bottom = top + shape.height
-
-                    points = np.array([[left, right,  right,   left],
-                                       [ top,   top, bottom, bottom],
-                                       [   1,     1,      1,      1]], dtype=float)
-
-                    cx = (left + right) / 2
-                    cy = (top + bottom) / 2
-
-                    m = np.eye(3)
-
-                    # Rotate by picture's own rotation
-                    m = np.matmul(translate(-cx, -cy), m)
-                    m = np.matmul(rotate(shape.rotation), m)
-                    m = np.matmul(translate(cx, cy), m)
-                    
-                    # Compose with parent transformation
-                    m = np.matmul(transformation, m)
-                    
-                    points = np.matmul(m, points)
-                    # Rectangle configuration doesn't really support rotations
-                    # so we just take the topmost, leftmost, bottommost, and
-                    # rightmost x and y coordinates
-                    xs = points[0]
-                    ys = points[1]
-
-                    assets.append({
-                        "key": image_s3_key,
-                        "kind": "image",
-                        "page": page_number,
-                        "box": [
-                            float(xs.min() / Pt(1)),
-                            float(ys.min() / Pt(1)),
-                            float(xs.max() / Pt(1)),
-                            float(ys.max() / Pt(1)),
-                        ]
-                    })
-    
-        for slide in prs.slides:
-            parse(slide.shapes)
-            page_number += 1
+        assets = parse_pptx(stream=stream, source_file=source_file)
 
     elif source_file.extension.lower() == ".pdf":
-        doc = pymupdf.open(stream=file_bytes, filetype="pdf")
-        for page in doc:
-            for image_info in page.get_images():
-                xref = image_info[0]
-                image = doc.extract_image(xref)
-                image_bytes = image["image"]
+        assets = parse_pdf(stream=stream, source_file=source_file)
+
+    elif source_file.extension.lower() == ".docx":
+        soffice = shutil.which("soffice") or shutil.which("libreoffice")
+        if soffice is None:
+            raise RuntimeError("LibreOffice not found")
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            src = Path(temp_dir, "input.docx")
+            src.write_bytes(file_bytes)
                 
-                # Doesn't include the '.', e.g. 'jpeg'
-                image_extension = image["ext"]
+            subprocess.run(
+                [soffice, "--headless", "--convert-to", "pdf",
+                "--outdir", temp_dir, str(src)], timeout=120,
+            )
 
-                image_uuid = uuid.uuid4()
-                image_s3_key = class_key(
-                    source_file.klass_id,
-                    "assets",
-                    image_uuid,
-                    f"image_p{page.number + 1}-{xref}.{image_extension}"
-                )
+            stream = Path(temp_dir, "input.pdf").read_bytes()
 
-                put_bytes(image_s3_key, image_bytes, content_type=f"image/{image_extension}")
-
-                rects = page.get_image_rects(xref)
-
-                for rect in rects:
-                    assets.append({
-                        "key": image_s3_key,
-                        "kind": "image",
-                        "page": page.number + 1,
-                        "box": list(rect)
-                    })
+        assets = parse_pdf(stream=stream, source_file=source_file)
     
     processing_job.status = ProcessingJob.Status.SUCCEEDED
     processing_job.finished_at = timezone.now()
